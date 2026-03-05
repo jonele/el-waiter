@@ -98,6 +98,13 @@ export default function TablesPage() {
         <div className="flex items-center gap-2">
           <span className={`h-2 w-2 rounded-full ${isOnline ? "bg-green-500" : "bg-red-500"}`} />
           <button
+            onClick={() => router.push("/wallet")}
+            className="text-gray-400 p-2 touch-btn"
+            aria-label="Πορτοφόλι"
+          >
+            💰
+          </button>
+          <button
             onClick={() => router.push("/settings")}
             className="text-gray-400 p-2 touch-btn"
             aria-label="Ρυθμίσεις"

@@ -118,7 +118,7 @@ export default function OrderPage() {
       : {
           id: uuidv4(), table_id: activeTable.id, table_name: activeTable.name,
           waiter_id: waiter.id, waiter_name: waiter.name, venue_id: settings.venueId,
-          items: orderItems, total, status: "sent", created_at: now, updated_at: now,
+          items: orderItems, total, tip: 0, status: "sent", created_at: now, updated_at: now,
           sent_at: now, synced: false,
         };
 

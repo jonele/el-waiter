@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import ConnectivityMonitor from "@/components/ConnectivityMonitor";
+import KdsListener from "@/components/KdsListener";
 
 const inter = Inter({ subsets: ["greek", "latin"] });
 
@@ -38,6 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={inter.className}>
         <ServiceWorkerRegistrar />
         <ConnectivityMonitor />
+        <KdsListener />
         {children}
       </body>
     </html>

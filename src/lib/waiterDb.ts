@@ -60,6 +60,8 @@ export interface DbOrderItem {
   notes?: string;
 }
 
+export type PaymentMethod = "cash" | "card_lan" | "card_bt" | "preorder";
+
 export interface DbOrder {
   id: string;
   table_id: string;
@@ -69,10 +71,13 @@ export interface DbOrder {
   venue_id: string;
   items: DbOrderItem[];
   total: number;
+  tip: number;
   status: "open" | "sent" | "paid" | "cancelled";
+  payment_method?: PaymentMethod;
   created_at: string;
   updated_at: string;
   sent_at?: string;
+  paid_at?: string;
   synced: boolean;
 }
 
@@ -104,6 +109,16 @@ class WaiterDatabase extends Dexie {
       orders:         "id, table_id, status, synced, created_at",
       syncQueue:      "++id, type, created_at",
     });
+    // v2: adds tip, payment_method, paid_at — non-indexed, no schema change needed
+    this.version(2).stores({
+      waiterProfiles: "id, venue_id, active",
+      floorSections:  "id, venue_id, sort_order",
+      posTables:      "id, venue_id, floor_section_id, status",
+      menuCategories: "id, venue_id, parent_id, sort_order",
+      menuItems:      "id, venue_id, category_id, sort_order",
+      orders:         "id, table_id, waiter_id, status, payment_method, synced, created_at",
+      syncQueue:      "++id, type, created_at",
+    });
   }
 }
 
@@ -118,4 +133,12 @@ export async function getOpenOrder(tableId: string): Promise<DbOrder | undefined
 
 export function calcTotal(items: DbOrderItem[]): number {
   return items.reduce((s, i) => s + i.price * i.quantity, 0);
+}
+
+/** Orders for this waiter created on or after a given ISO date string */
+export async function getWaiterOrders(waiterId: string, sinceIso: string): Promise<DbOrder[]> {
+  return waiterDb.orders
+    .where("waiter_id").equals(waiterId)
+    .and((o) => o.created_at >= sinceIso)
+    .sortBy("created_at");
 }
