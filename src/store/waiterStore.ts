@@ -1,0 +1,56 @@
+import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
+import { DbWaiterProfile, DbTable } from "@/lib/waiterDb";
+
+export interface WaiterSettings {
+  venueId:           string;
+  bridgeUrl:         string;
+  btEnabled:         boolean;
+  minConsumptionEur: number;
+}
+
+const DEFAULTS: WaiterSettings = {
+  venueId:           "",
+  bridgeUrl:         "http://localhost:8088",
+  btEnabled:         false,
+  minConsumptionEur: 0,
+};
+
+interface WaiterState {
+  waiter:       DbWaiterProfile | null;
+  activeTable:  DbTable | null;
+  settings:     WaiterSettings;
+  isOnline:     boolean;
+  pendingSyncs: number;
+
+  login:          (w: DbWaiterProfile) => void;
+  logout:         () => void;
+  setActiveTable: (t: DbTable | null) => void;
+  updateSettings: (u: Partial<WaiterSettings>) => void;
+  setOnline:      (v: boolean) => void;
+  setPendingSyncs:(n: number)  => void;
+}
+
+export const useWaiterStore = create<WaiterState>()(
+  persist(
+    (set) => ({
+      waiter:       null,
+      activeTable:  null,
+      settings:     DEFAULTS,
+      isOnline:     true,
+      pendingSyncs: 0,
+
+      login:          (waiter)  => set({ waiter }),
+      logout:         ()        => set({ waiter: null, activeTable: null }),
+      setActiveTable: (t)       => set({ activeTable: t }),
+      updateSettings: (u)       => set((s) => ({ settings: { ...s.settings, ...u } })),
+      setOnline:      (isOnline)      => set({ isOnline }),
+      setPendingSyncs:(pendingSyncs)  => set({ pendingSyncs }),
+    }),
+    {
+      name:    "el-waiter",
+      storage: createJSONStorage(() => localStorage),
+      partialize: (s) => ({ waiter: s.waiter, settings: s.settings }),
+    }
+  )
+);
