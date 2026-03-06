@@ -5,14 +5,12 @@ import { DbWaiterProfile, DbTable } from "@/lib/waiterDb";
 export type Theme = 'dark' | 'grey' | 'light';
 
 export interface WaiterSettings {
-  venueId:           string;
   bridgeUrl:         string;
   btEnabled:         boolean;
   minConsumptionEur: number;
 }
 
 const DEFAULTS: WaiterSettings = {
-  venueId:           "",
   bridgeUrl:         "http://localhost:8088",
   btEnabled:         false,
   minConsumptionEur: 0,

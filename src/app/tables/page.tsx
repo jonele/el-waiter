@@ -30,12 +30,12 @@ export default function TablesPage() {
     if (!waiter) { router.replace("/"); return; }
     loadLocal();
     if (isOnline) syncFromSupabase();
-  }, [waiter, settings.venueId]);
+  }, [waiter, waiter!.venue_id]);
 
   async function loadLocal() {
     const [secs, tbls, orders] = await Promise.all([
-      waiterDb.floorSections.where("venue_id").equals(settings.venueId).sortBy("sort_order"),
-      waiterDb.posTables.where("venue_id").equals(settings.venueId).sortBy("sort_order"),
+      waiterDb.floorSections.where("venue_id").equals(waiter!.venue_id).sortBy("sort_order"),
+      waiterDb.posTables.where("venue_id").equals(waiter!.venue_id).sortBy("sort_order"),
       waiterDb.orders.where("status").anyOf(["open", "sent"]).toArray(),
     ]);
     setSections(secs);
@@ -46,12 +46,12 @@ export default function TablesPage() {
   }
 
   async function syncFromSupabase() {
-    if (!supabase || !settings.venueId) return;
+    if (!supabase || !waiter!.venue_id) return;
     setSyncing(true);
     try {
       const [{ data: secs }, { data: tbls }] = await Promise.all([
-        supabase.from("pos_floor_sections").select("*").eq("venue_id", settings.venueId),
-        supabase.from("pos_tables").select("*").eq("venue_id", settings.venueId),
+        supabase.from("pos_floor_sections").select("*").eq("venue_id", waiter!.venue_id),
+        supabase.from("pos_tables").select("*").eq("venue_id", waiter!.venue_id),
       ]);
       if (secs) {
         await waiterDb.floorSections.bulkPut(secs.map((s) => ({

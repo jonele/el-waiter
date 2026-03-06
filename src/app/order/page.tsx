@@ -57,7 +57,7 @@ export default function OrderPage() {
 
   async function loadData() {
     const [cats, existingOrder] = await Promise.all([
-      waiterDb.menuCategories.where("venue_id").equals(settings.venueId).sortBy("sort_order"),
+      waiterDb.menuCategories.where("venue_id").equals(waiter!.venue_id).sortBy("sort_order"),
       getOpenOrder(activeTable!.id),
     ]);
     const activeCats = cats.filter((c) => c.is_active);
@@ -69,14 +69,14 @@ export default function OrderPage() {
       setOrderItems(existingOrder.items);
     }
 
-    if (isOnline && supabase && settings.venueId) {
+    if (isOnline && supabase && waiter!.venue_id) {
       const [{ data: dbCats }, { data: dbItems }] = await Promise.all([
-        supabase.from("menu_categories").select("*").eq("venue_id", settings.venueId).eq("is_active", true),
-        supabase.from("menu_items").select("*").eq("venue_id", settings.venueId).eq("is_active", true).eq("is_available", true),
+        supabase.from("menu_categories").select("*").eq("venue_id", waiter!.venue_id).eq("is_active", true),
+        supabase.from("menu_items").select("*").eq("venue_id", waiter!.venue_id).eq("is_active", true).eq("is_available", true),
       ]);
       if (dbCats) await waiterDb.menuCategories.bulkPut(dbCats);
       if (dbItems) await waiterDb.menuItems.bulkPut(dbItems);
-      const freshCats = await waiterDb.menuCategories.where("venue_id").equals(settings.venueId).sortBy("sort_order");
+      const freshCats = await waiterDb.menuCategories.where("venue_id").equals(waiter!.venue_id).sortBy("sort_order");
       const ac = freshCats.filter((c) => c.is_active);
       setCategories(ac);
       if (ac.length > 0 && !activeCategory) setActiveCategory(ac[0].id);
@@ -152,7 +152,7 @@ export default function OrderPage() {
       ? { ...order, items: orderItems, total, updated_at: now, synced: false }
       : {
           id: uuidv4(), table_id: activeTable.id, table_name: activeTable.name,
-          waiter_id: waiter.id, waiter_name: waiter.name, venue_id: settings.venueId,
+          waiter_id: waiter.id, waiter_name: waiter.name, venue_id: waiter!.venue_id,
           items: orderItems, total, tip: 0, status: "sent",
           created_at: now, updated_at: now, sent_at: now, synced: false,
         };
@@ -165,7 +165,7 @@ export default function OrderPage() {
     if (isOnline && supabase) {
       try {
         await supabase.from("kitchen_orders").upsert({
-          id: newOrder.id, venue_id: settings.venueId,
+          id: newOrder.id, venue_id: waiter!.venue_id,
           tab_name: activeTable.name, cashier_name: waiter.name,
           items: orderItems, status: "pending", created_at: newOrder.created_at,
         });

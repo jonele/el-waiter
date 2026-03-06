@@ -5,7 +5,7 @@ import { waiterDb } from "@/lib/waiterDb";
 import { supabase } from "@/lib/supabase";
 
 export default function ConnectivityMonitor() {
-  const { settings, setOnline, setPendingSyncs } = useWaiterStore();
+  const { waiter, settings, setOnline, setPendingSyncs } = useWaiterStore();
 
   useEffect(() => {
     function update() { setOnline(navigator.onLine); }
@@ -16,7 +16,7 @@ export default function ConnectivityMonitor() {
     const interval = setInterval(async () => {
       const cnt = await waiterDb.syncQueue.count();
       setPendingSyncs(cnt);
-      if (cnt > 0 && navigator.onLine && supabase && settings.venueId) {
+      if (cnt > 0 && navigator.onLine && supabase && waiter?.venue_id) {
         void drainQueue();
       }
     }, 15000);
@@ -26,7 +26,7 @@ export default function ConnectivityMonitor() {
       window.removeEventListener("offline", update);
       clearInterval(interval);
     };
-  }, [settings.venueId]);
+  }, [waiter?.venue_id]);
 
   async function drainQueue() {
     const items = await waiterDb.syncQueue.limit(10).toArray();

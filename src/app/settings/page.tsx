@@ -14,7 +14,7 @@ const THEMES: { key: Theme; label: string; icon: string }[] = [
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { settings, updateSettings, isOnline, pendingSyncs, theme, setTheme, logout } = useWaiterStore();
+  const { waiter, settings, updateSettings, isOnline, pendingSyncs, theme, setTheme, logout } = useWaiterStore();
   const [form, setForm] = useState(settings);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
@@ -27,16 +27,17 @@ export default function SettingsPage() {
   }
 
   async function syncAll() {
-    if (!supabase || !form.venueId) { setSyncMsg("Ορίστε Venue ID πρώτα."); return; }
+    const venueId = waiter?.venue_id;
+    if (!supabase || !venueId) { setSyncMsg("Δεν βρέθηκε Venue ID στο προφίλ σερβιτόρου."); return; }
     setSyncing(true);
     setSyncMsg("");
     try {
       const [{ data: secs }, { data: tbls }, { data: cats }, { data: itms }, { data: waiters }] = await Promise.all([
-        supabase.from("pos_floor_sections").select("*").eq("venue_id", form.venueId),
-        supabase.from("pos_tables").select("*").eq("venue_id", form.venueId),
-        supabase.from("menu_categories").select("*").eq("venue_id", form.venueId).eq("is_active", true),
-        supabase.from("menu_items").select("*").eq("venue_id", form.venueId).eq("is_active", true),
-        supabase.from("waiter_profiles").select("*").eq("venue_id", form.venueId).eq("active", true),
+        supabase.from("pos_floor_sections").select("*").eq("venue_id", venueId),
+        supabase.from("pos_tables").select("*").eq("venue_id", venueId),
+        supabase.from("menu_categories").select("*").eq("venue_id", venueId).eq("is_active", true),
+        supabase.from("menu_items").select("*").eq("venue_id", venueId).eq("is_active", true),
+        supabase.from("waiter_profiles").select("*").eq("venue_id", venueId).eq("active", true),
       ]);
       if (secs) await waiterDb.floorSections.bulkPut(secs.map((s) => ({
         id: s.id, venue_id: s.venue_id, name: s.name,
@@ -124,19 +125,6 @@ export default function SettingsPage() {
 
         {/* Divider */}
         <div style={{ height: 1, background: "var(--c-border)" }} />
-
-        {/* Venue ID */}
-        <div className="space-y-1">
-          <label className="text-sm font-medium" style={{ color: "var(--c-text2)" }}>Venue ID</label>
-          <input
-            value={form.venueId}
-            onChange={(e) => setForm({ ...form, venueId: e.target.value.trim() })}
-            placeholder="uuid του venue"
-            className="w-full rounded-xl px-4 py-3 text-sm outline-none"
-            style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
-          />
-          <p className="text-xs" style={{ color: "var(--c-text3)" }}>Βρείτε το στο EL-Loyal dashboard.</p>
-        </div>
 
         {/* Bridge URL */}
         <div className="space-y-1">

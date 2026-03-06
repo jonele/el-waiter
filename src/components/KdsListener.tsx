@@ -13,7 +13,7 @@ interface ReadyOrder {
 let globalDismissed = new Set<string>();
 
 export default function KdsListener() {
-  const { waiter, settings } = useWaiterStore();
+  const { waiter } = useWaiterStore();
   const [readyOrders, setReadyOrders] = useState<ReadyOrder[]>([]);
   const channelRef = useRef<ReturnType<NonNullable<typeof supabase>["channel"]> | null>(null);
   const permRef = useRef(false);
@@ -40,19 +40,19 @@ export default function KdsListener() {
   }
 
   useEffect(() => {
-    if (!waiter || !settings.venueId || !supabase) return;
+    if (!waiter || !waiter.venue_id || !supabase) return;
 
     void requestNotifPermission();
 
     const channel = supabase!
-      .channel(`kds-ready-${settings.venueId}`)
+      .channel(`kds-ready-${waiter!.venue_id}`)
       .on(
         "postgres_changes",
         {
           event: "UPDATE",
           schema: "public",
           table: "kitchen_orders",
-          filter: `venue_id=eq.${settings.venueId}`,
+          filter: `venue_id=eq.${waiter!.venue_id}`,
         },
         (payload) => {
           const row = payload.new as { id: string; tab_name: string; status: string };
@@ -74,7 +74,7 @@ export default function KdsListener() {
       void supabase!.removeChannel(channel);
       channelRef.current = null;
     };
-  }, [waiter?.id, settings.venueId]);
+  }, [waiter?.id, waiter?.venue_id]);
 
   function dismiss(id: string) {
     globalDismissed.add(id);
