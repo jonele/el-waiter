@@ -2,6 +2,63 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Theme CSS Variables ─────────────────────────────────────── */
+:root {
+  /* Dark theme (default) */
+  --c-bg:         #090910;
+  --c-surface:    #131318;
+  --c-surface2:   #1c1c24;
+  --c-text:       #ffffff;
+  --c-text2:      #6b7280;
+  --c-text3:      #4b5563;
+  --c-border:     rgba(255,255,255,0.06);
+  --c-header:     rgba(13,13,20,0.88);
+  /* Status card backgrounds */
+  --c-free:       #052e16;
+  --c-free-b:     rgba(20,83,45,0.4);
+  --c-occ:        #172554;
+  --c-occ-b:      rgba(30,58,138,0.4);
+  --c-wait:       #431407;
+  --c-wait-b:     rgba(124,45,18,0.4);
+  --c-card-text:  #ffffff;
+}
+
+.theme-grey {
+  --c-bg:         #1c1c1e;
+  --c-surface:    #2c2c2e;
+  --c-surface2:   #3a3a3c;
+  --c-text:       #ffffff;
+  --c-text2:      #8e8e93;
+  --c-text3:      #636366;
+  --c-border:     rgba(255,255,255,0.08);
+  --c-header:     rgba(28,28,30,0.92);
+  --c-free:       #064e3b;
+  --c-free-b:     rgba(6,78,59,0.5);
+  --c-occ:        #1e3a8a;
+  --c-occ-b:      rgba(30,58,138,0.5);
+  --c-wait:       #78350f;
+  --c-wait-b:     rgba(120,53,15,0.5);
+  --c-card-text:  #ffffff;
+}
+
+.theme-light {
+  --c-bg:         #f2f2f7;
+  --c-surface:    #ffffff;
+  --c-surface2:   #e5e5ea;
+  --c-text:       #000000;
+  --c-text2:      #6b6b6b;
+  --c-text3:      #aeaeb2;
+  --c-border:     rgba(0,0,0,0.09);
+  --c-header:     rgba(255,255,255,0.88);
+  --c-free:       #dcfce7;
+  --c-free-b:     rgba(74,222,128,0.5);
+  --c-occ:        #dbeafe;
+  --c-occ-b:      rgba(96,165,250,0.5);
+  --c-wait:       #fef3c7;
+  --c-wait-b:     rgba(251,191,36,0.5);
+  --c-card-text:  #111827;
+}
+
 @layer base {
   :root {
     --safe-top: env(safe-area-inset-top);
@@ -16,7 +73,9 @@
   }
 
   body {
-    @apply bg-gray-950 text-gray-100 font-sans;
+    @apply font-sans;
+    background: var(--c-bg);
+    color: var(--c-text);
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);

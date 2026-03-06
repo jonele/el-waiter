@@ -6,22 +6,20 @@ import { useWaiterStore } from "@/store/waiterStore";
 import { supabase } from "@/lib/supabase";
 import BottomNav from "@/components/BottomNav";
 import type { DbTable, DbFloorSection } from "@/lib/waiterDb";
+import type { Theme } from "@/store/waiterStore";
 
-const CARD_BG: Record<string, string> = {
-  free:     "bg-emerald-950 border-emerald-800/30",
-  occupied: "bg-blue-950 border-blue-800/30",
-  waiting:  "bg-amber-950 border-amber-800/30",
+const STATUS_BG: Record<string, { bg: string; border: string; dot: string; dotCls: string }> = {
+  free:     { bg: "var(--c-free)",  border: "var(--c-free-b)",  dot: "var(--status-free-dot, #4ade80)",  dotCls: "animate-pulse" },
+  occupied: { bg: "var(--c-occ)",   border: "var(--c-occ-b)",   dot: "var(--status-occ-dot, #60a5fa)",   dotCls: "" },
+  waiting:  { bg: "var(--c-wait)",  border: "var(--c-wait-b)",  dot: "var(--status-wait-dot, #fbbf24)",  dotCls: "animate-pulse-fast" },
 };
 
-const DOT_CLASS: Record<string, string> = {
-  free:     "bg-green-400 animate-pulse",
-  occupied: "bg-blue-400",
-  waiting:  "bg-amber-400 animate-pulse-fast",
-};
+const THEME_CYCLE: Theme[] = ["dark", "grey", "light"];
+const THEME_ICON: Record<Theme, string> = { dark: "🌙", grey: "🌫", light: "☀️" };
 
 export default function TablesPage() {
   const router = useRouter();
-  const { waiter, settings, isOnline, pendingSyncs } = useWaiterStore();
+  const { waiter, settings, isOnline, pendingSyncs, theme, setTheme } = useWaiterStore();
   const [sections, setSections] = useState<DbFloorSection[]>([]);
   const [tables, setTables] = useState<DbTable[]>([]);
   const [orderTotals, setOrderTotals] = useState<Record<string, number>>({});
@@ -83,20 +81,31 @@ export default function TablesPage() {
     router.push("/order");
   }
 
+  function cycleTheme() {
+    const next = THEME_CYCLE[(THEME_CYCLE.indexOf(theme) + 1) % THEME_CYCLE.length];
+    setTheme(next);
+  }
+
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col" style={{ background: "var(--c-bg)" }}>
 
       {/* Header */}
-      <div className="pt-safe sticky top-0 z-30 bg-gray-900/85 backdrop-blur-md border-b border-white/5 px-4 py-3 flex items-center justify-between">
+      <div
+        className="pt-safe sticky top-0 z-30 backdrop-blur-md border-b px-4 py-3 flex items-center justify-between"
+        style={{ background: "var(--c-header)", borderColor: "var(--c-border)" }}
+      >
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-blue-950 flex items-center justify-center text-2xl shrink-0">
+          <div
+            className="w-10 h-10 rounded-full flex items-center justify-center text-2xl shrink-0"
+            style={{ background: "var(--c-surface2)" }}
+          >
             {waiter?.icon || "👤"}
           </div>
           <div className="flex flex-col leading-tight">
-            <span className="font-semibold text-white text-sm">{waiter?.name}</span>
+            <span className="font-semibold text-sm" style={{ color: "var(--c-text)" }}>{waiter?.name}</span>
             <div className="flex items-center gap-1.5">
               <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? "bg-green-400 animate-pulse" : "bg-red-500"}`} />
-              <span className="text-[10px] text-gray-500">
+              <span className="text-[10px]" style={{ color: "var(--c-text2)" }}>
                 {isOnline ? "Συνδεδεμένος" : "Εκτός σύνδεσης"}
               </span>
             </div>
@@ -108,18 +117,27 @@ export default function TablesPage() {
           )}
         </div>
 
-        {/* Right actions — wallet + settings as large touch targets */}
         <div className="flex items-center -mr-2">
+          {/* Theme toggle */}
+          <button
+            onClick={cycleTheme}
+            className="flex items-center justify-center w-[60px] h-[60px] text-xl transition-transform active:scale-90"
+            aria-label="Αλλαγή θέματος"
+          >
+            {THEME_ICON[theme]}
+          </button>
           <button
             onClick={() => router.push("/wallet")}
-            className="flex items-center justify-center w-[60px] h-[60px] text-gray-400 active:text-white transition-colors"
+            className="flex items-center justify-center w-[60px] h-[60px] transition-colors active:opacity-60"
+            style={{ color: "var(--c-text2)" }}
             aria-label="Πορτοφόλι"
           >
             <WalletSvg />
           </button>
           <button
             onClick={() => router.push("/settings")}
-            className="flex items-center justify-center w-[60px] h-[60px] text-gray-400 active:text-white transition-colors"
+            className="flex items-center justify-center w-[60px] h-[60px] transition-colors active:opacity-60"
+            style={{ color: "var(--c-text2)" }}
             aria-label="Ρυθμίσεις"
           >
             <GearSvg />
@@ -129,15 +147,18 @@ export default function TablesPage() {
 
       {/* Section tabs */}
       {sections.length > 0 && (
-        <div className="flex gap-2 overflow-x-auto px-4 py-2.5 bg-gray-950 border-b border-white/5 shrink-0">
+        <div
+          className="flex gap-2 overflow-x-auto px-4 py-2.5 border-b shrink-0"
+          style={{ background: "var(--c-bg)", borderColor: "var(--c-border)" }}
+        >
           {[{ id: "all", name: "Όλα" }, ...sections].map((s) => (
             <button
               key={s.id}
               onClick={() => setActiveSection(s.id)}
-              className={`shrink-0 rounded-full px-4 h-10 text-sm font-medium transition-colors
-                ${activeSection === s.id
-                  ? "bg-brand text-white"
-                  : "bg-gray-800/70 text-gray-400 active:bg-gray-700"}`}
+              className={`shrink-0 rounded-full px-4 h-10 text-sm font-medium transition-colors ${
+                activeSection === s.id ? "bg-brand text-white" : "active:opacity-70"
+              }`}
+              style={activeSection !== s.id ? { background: "var(--c-surface2)", color: "var(--c-text2)" } : {}}
             >
               {s.name}
             </button>
@@ -148,38 +169,39 @@ export default function TablesPage() {
       {/* Tables grid */}
       <div className="flex-1 overflow-y-auto px-4 py-4 pb-[calc(80px+env(safe-area-inset-bottom))]">
         {syncing && tables.length === 0 && (
-          <p className="text-center text-gray-600 mt-10 text-sm">Συγχρονισμός...</p>
+          <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>Συγχρονισμός...</p>
         )}
         {!syncing && filtered.length === 0 && (
-          <p className="text-center text-gray-600 mt-10 text-sm">Δεν βρέθηκαν τραπέζια</p>
+          <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>Δεν βρέθηκαν τραπέζια</p>
         )}
         <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
           {filtered.map((t) => {
             const total = orderTotals[t.id];
             const minOk = !settings.minConsumptionEur || !total || total >= settings.minConsumptionEur;
-            const cardBg = CARD_BG[t.status] ?? CARD_BG.free;
-            const dotCls = DOT_CLASS[t.status] ?? DOT_CLASS.free;
+            const st = STATUS_BG[t.status] ?? STATUS_BG.free;
             return (
               <button
                 key={t.id}
                 onClick={() => openTable(t)}
-                className={`relative flex flex-col items-center justify-center gap-1 rounded-3xl border-2 min-h-[96px] px-2 py-4
-                  transition-transform active:scale-90 duration-100 ${cardBg}`}
+                className="relative flex flex-col items-center justify-center gap-1 rounded-3xl border-2 min-h-[96px] px-2 py-4 transition-transform active:scale-90 duration-100"
+                style={{ background: st.bg, borderColor: st.border }}
               >
                 {/* Status dot */}
-                <span className={`absolute top-2.5 right-2.5 h-2.5 w-2.5 rounded-full ${dotCls}`} />
-
-                {/* Min consumption warning */}
+                <span
+                  className={`absolute top-2.5 right-2.5 h-2.5 w-2.5 rounded-full ${st.dotCls}`}
+                  style={{ background: st.dot }}
+                />
                 {!minOk && (
-                  <span className="absolute top-2 left-2 text-xs leading-none">⚠</span>
+                  <span className="absolute top-2 left-2 text-xs text-amber-400 leading-none">⚠</span>
                 )}
-
-                {/* Table name */}
-                <span className="text-2xl font-black text-white leading-none">{t.name}</span>
-
-                {/* Amount badge */}
+                <span className="text-2xl font-black leading-none" style={{ color: "var(--c-card-text)" }}>
+                  {t.name}
+                </span>
                 {total !== undefined && (
-                  <span className="rounded-full bg-black/30 px-2.5 py-0.5 text-[11px] font-semibold text-white">
+                  <span
+                    className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                    style={{ background: "rgba(0,0,0,0.25)", color: "var(--c-card-text)" }}
+                  >
                     {total.toFixed(2)}€
                   </span>
                 )}

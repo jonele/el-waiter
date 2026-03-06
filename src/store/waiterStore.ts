@@ -2,6 +2,8 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { DbWaiterProfile, DbTable } from "@/lib/waiterDb";
 
+export type Theme = 'dark' | 'grey' | 'light';
+
 export interface WaiterSettings {
   venueId:           string;
   bridgeUrl:         string;
@@ -20,6 +22,7 @@ interface WaiterState {
   waiter:       DbWaiterProfile | null;
   activeTable:  DbTable | null;
   settings:     WaiterSettings;
+  theme:        Theme;
   isOnline:     boolean;
   pendingSyncs: number;
 
@@ -27,6 +30,7 @@ interface WaiterState {
   logout:         () => void;
   setActiveTable: (t: DbTable | null) => void;
   updateSettings: (u: Partial<WaiterSettings>) => void;
+  setTheme:       (t: Theme) => void;
   setOnline:      (v: boolean) => void;
   setPendingSyncs:(n: number)  => void;
 }
@@ -37,6 +41,7 @@ export const useWaiterStore = create<WaiterState>()(
       waiter:       null,
       activeTable:  null,
       settings:     DEFAULTS,
+      theme:        'dark' as Theme,
       isOnline:     true,
       pendingSyncs: 0,
 
@@ -44,13 +49,14 @@ export const useWaiterStore = create<WaiterState>()(
       logout:         ()        => set({ waiter: null, activeTable: null }),
       setActiveTable: (t)       => set({ activeTable: t }),
       updateSettings: (u)       => set((s) => ({ settings: { ...s.settings, ...u } })),
+      setTheme:       (theme)   => set({ theme }),
       setOnline:      (isOnline)      => set({ isOnline }),
       setPendingSyncs:(pendingSyncs)  => set({ pendingSyncs }),
     }),
     {
       name:    "el-waiter",
       storage: createJSONStorage(() => localStorage),
-      partialize: (s) => ({ waiter: s.waiter, settings: s.settings }),
+      partialize: (s) => ({ waiter: s.waiter, settings: s.settings, theme: s.theme }),
     }
   )
 );

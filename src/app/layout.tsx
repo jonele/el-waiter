@@ -4,6 +4,7 @@ import "./globals.css";
 import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import ConnectivityMonitor from "@/components/ConnectivityMonitor";
 import KdsListener from "@/components/KdsListener";
+import ThemeApplicator from "@/components/ThemeApplicator";
 
 const inter = Inter({ subsets: ["greek", "latin"] });
 
@@ -37,6 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
       <body className={inter.className}>
+        <ThemeApplicator />
         <ServiceWorkerRegistrar />
         <ConnectivityMonitor />
         <KdsListener />

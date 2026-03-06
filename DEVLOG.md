@@ -9,3 +9,13 @@
 - **Πληρωμή** button: green accent pill (was plain text link)
 - +/- cart buttons: 44px → w-11 h-11 (44px, full circle)
 - slideUp + pulse-fast keyframes added to globals.css
+
+## 2026-03-06 — Theme System + DeviceSettings Fix
+- CSS variable theme system: Dark / Grey / Light — all vars in globals.css
+- ThemeApplicator component applies .theme-grey / .theme-light class to <html>
+- theme: Theme persisted in Zustand store (localStorage)
+- Theme toggle: 🌙/🌫/☀️ cycle button in tables header
+- Settings page: 3-pill theme selector + logout button added
+- All screens (tables, order, settings, BottomNav) use var(--c-*) for bg/text/border
+- Status card backgrounds theme-aware (dark emerald/blue/amber → pastel on light theme)
+- DeviceSettings: Web Apps (EL Waiter, KDS, Kiosk) moved OUT of PIN-locked Technician Tools — now always-visible top-level section

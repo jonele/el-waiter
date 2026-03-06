@@ -189,16 +189,19 @@ export default function OrderPage() {
   }
 
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col" style={{ background: "var(--c-bg)" }}>
 
       {/* Upsell — bottom sheet */}
       {showUpsell && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/70">
-          <div className="w-full max-w-lg rounded-t-3xl bg-gray-900 px-6 pt-4 pb-safe space-y-4 animate-[slideUp_0.25s_ease-out]">
-            <div className="mx-auto w-10 h-1 rounded-full bg-gray-700" />
-            <p className="text-xl font-black text-white text-center pt-2">Πρόταση</p>
+          <div
+            className="w-full max-w-lg rounded-t-3xl px-6 pt-4 pb-safe space-y-4 animate-[slideUp_0.25s_ease-out]"
+            style={{ background: "var(--c-surface)" }}
+          >
+            <div className="mx-auto w-10 h-1 rounded-full" style={{ background: "var(--c-surface2)" }} />
+            <p className="text-xl font-black text-center pt-2" style={{ color: "var(--c-text)" }}>Πρόταση</p>
             {upsells.map((u, i) => (
-              <div key={i} className="rounded-2xl bg-brand/10 border border-brand/30 p-4 text-white text-center text-sm leading-relaxed">
+              <div key={i} className="rounded-2xl bg-brand/10 border border-brand/30 p-4 text-center text-sm leading-relaxed" style={{ color: "var(--c-text)" }}>
                 {u}
               </div>
             ))}
@@ -213,7 +216,10 @@ export default function OrderPage() {
       )}
 
       {/* Header */}
-      <div className="pt-safe sticky top-0 z-30 bg-gray-900/90 backdrop-blur-md border-b border-white/5">
+      <div
+        className="pt-safe sticky top-0 z-30 backdrop-blur-md border-b"
+        style={{ background: "var(--c-header)", borderColor: "var(--c-border)" }}
+      >
 
         {/* Top row: back / table name / pay */}
         <div className="px-2 py-2 flex items-center justify-between gap-2">
@@ -228,8 +234,8 @@ export default function OrderPage() {
           </button>
 
           <div className="text-center flex-1">
-            <p className="font-black text-white text-xl leading-none">{activeTable?.name}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{waiter?.name}</p>
+            <p className="font-black text-xl leading-none" style={{ color: "var(--c-text)" }}>{activeTable?.name}</p>
+            <p className="text-xs mt-0.5" style={{ color: "var(--c-text2)" }}>{waiter?.name}</p>
           </div>
 
           <button
@@ -258,7 +264,10 @@ export default function OrderPage() {
               Καλάθι{cartCount > 0 ? ` (${cartCount})` : ""}
             </button>
           </div>
-          <span className={`font-black text-xl ${minOk ? "text-white" : "text-amber-400"}`}>
+          <span
+            className={`font-black text-xl ${!minOk ? "text-amber-400" : ""}`}
+            style={minOk ? { color: "var(--c-text)" } : {}}
+          >
             {total.toFixed(2)}€
           </span>
         </div>
@@ -295,15 +304,17 @@ export default function OrderPage() {
         <div className="flex flex-1 overflow-hidden">
 
           {/* Category sidebar */}
-          <div className="w-20 shrink-0 overflow-y-auto bg-gray-900/50 border-r border-white/5 py-1">
+          <div
+            className="w-20 shrink-0 overflow-y-auto border-r py-1"
+            style={{ background: "var(--c-surface)", borderColor: "var(--c-border)" }}
+          >
             {categories.map((c) => (
               <button
                 key={c.id}
                 onClick={() => { setActiveCategory(c.id); setSearch(""); }}
                 className={`w-full min-h-[60px] px-1 py-3 flex flex-col items-center justify-center gap-1 transition-colors
-                  ${activeCategory === c.id
-                    ? "border-r-2 border-brand bg-brand/10 text-white"
-                    : "text-gray-500 active:text-gray-300"}`}
+                  ${activeCategory === c.id ? "border-r-2 border-brand bg-brand/10" : "active:opacity-60"}`}
+                style={{ color: activeCategory === c.id ? "#3B82F6" : "var(--c-text2)" }}
               >
                 {c.color && (
                   <span
@@ -326,7 +337,8 @@ export default function OrderPage() {
                 placeholder="Αναζήτηση..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-xl bg-gray-800/80 px-4 py-2.5 text-white placeholder-gray-600 text-sm outline-none"
+                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none"
+                style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
               />
             </div>
             <div className="grid grid-cols-2 gap-2 px-3 pb-[calc(80px+env(safe-area-inset-bottom))] sm:grid-cols-3">
@@ -337,11 +349,10 @@ export default function OrderPage() {
                     key={item.id}
                     onClick={() => addItem(item)}
                     className={`relative flex flex-col rounded-2xl p-3 text-left min-h-[80px] transition-all active:scale-95 duration-75
-                      ${qty > 0
-                        ? "bg-brand/15 border border-brand/50"
-                        : "bg-gray-800/70 active:bg-gray-700/70"}`}
+                      ${qty > 0 ? "border border-brand/50 bg-brand/10" : ""}`}
+                    style={qty === 0 ? { background: "var(--c-surface2)" } : {}}
                   >
-                    <span className="text-sm font-semibold text-white leading-snug line-clamp-2 flex-1">
+                    <span className="text-sm font-semibold leading-snug line-clamp-2 flex-1" style={{ color: "var(--c-text)" }}>
                       {item.name}
                     </span>
                     <span className="text-accent font-bold text-sm mt-1.5">
@@ -362,7 +373,7 @@ export default function OrderPage() {
         /* CART TAB — grouped by seat */
         <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(80px+env(safe-area-inset-bottom))] space-y-5">
           {orderItems.length === 0 && (
-            <p className="text-center text-gray-600 mt-10 text-sm">Το καλάθι είναι άδειο</p>
+            <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>Το καλάθι είναι άδειο</p>
           )}
           {Array.from(seatGroups.entries())
             .sort(([a], [b]) => (a ?? 999) - (b ?? 999))
@@ -377,11 +388,12 @@ export default function OrderPage() {
                   {group.map((item) => (
                     <div
                       key={item.id}
-                      className="flex items-center justify-between rounded-2xl bg-gray-800/60 px-4 min-h-[64px]"
+                      className="flex items-center justify-between rounded-2xl px-4 min-h-[64px]"
+                      style={{ background: "var(--c-surface)" }}
                     >
                       <div className="flex-1 py-3">
-                        <p className="text-white font-semibold text-sm">{item.name}</p>
-                        <p className="text-gray-500 text-xs mt-0.5">
+                        <p className="font-semibold text-sm" style={{ color: "var(--c-text)" }}>{item.name}</p>
+                        <p className="text-xs mt-0.5" style={{ color: "var(--c-text2)" }}>
                           {item.price.toFixed(2)}€ × {item.quantity}
                           {" = "}
                           <span className="text-gray-300 font-medium">
@@ -392,16 +404,18 @@ export default function OrderPage() {
                       <div className="flex items-center gap-2 pl-3">
                         <button
                           onClick={() => removeItem(item.id)}
-                          className="w-11 h-11 rounded-full bg-gray-700 text-white flex items-center justify-center text-xl font-bold active:bg-gray-600 active:scale-90 transition-all"
+                          className="w-11 h-11 rounded-full flex items-center justify-center text-xl font-bold active:scale-90 transition-all"
+                          style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
                         >
                           −
                         </button>
-                        <span className="text-white font-black w-5 text-center text-base">
+                        <span className="font-black w-5 text-center text-base" style={{ color: "var(--c-text)" }}>
                           {item.quantity}
                         </span>
                         <button
                           onClick={() => addItem({ id: item.menu_item_id, name: item.name, price: item.price } as DbMenuItem)}
-                          className="w-11 h-11 rounded-full bg-gray-700 text-white flex items-center justify-center text-xl font-bold active:bg-gray-600 active:scale-90 transition-all"
+                          className="w-11 h-11 rounded-full flex items-center justify-center text-xl font-bold active:scale-90 transition-all"
+                          style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
                         >
                           +
                         </button>
@@ -416,7 +430,7 @@ export default function OrderPage() {
 
       {/* Send to kitchen CTA */}
       {orderItems.length > 0 && (
-        <div className="border-t border-white/5 bg-gray-900 px-4 py-3 pb-safe">
+        <div className="border-t px-4 py-3 pb-safe" style={{ background: "var(--c-surface)", borderColor: "var(--c-border)" }}>
           <button
             onClick={sendToKitchen}
             disabled={sending}
