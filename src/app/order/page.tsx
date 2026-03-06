@@ -130,13 +130,25 @@ export default function OrderPage() {
     });
   }
 
-  function removeItem(id: string) {
-    setOrderItems((prev) => {
-      const existing = prev.find((o) => o.id === id);
-      if (!existing) return prev;
-      if (existing.quantity <= 1) return prev.filter((o) => o.id !== id);
-      return prev.map((o) => o.id === id ? { ...o, quantity: o.quantity - 1 } : o);
-    });
+  async function removeItem(itemId: string) {
+    const next = orderItems.filter((o) => o.id !== itemId);
+    setOrderItems(next);
+    if (order) {
+      const newTotal = calcTotal(next);
+      await waiterDb.orders.update(order.id, { items: next, total: newTotal, synced: false });
+      setOrder((prev) => prev ? { ...prev, items: next, total: newTotal } : prev);
+    }
+  }
+
+  async function updateItemQty(itemId: string, newQty: number) {
+    if (newQty <= 0) { await removeItem(itemId); return; }
+    const next = orderItems.map((o) => o.id === itemId ? { ...o, quantity: newQty } : o);
+    setOrderItems(next);
+    if (order) {
+      const newTotal = calcTotal(next);
+      await waiterDb.orders.update(order.id, { items: next, total: newTotal, synced: false });
+      setOrder((prev) => prev ? { ...prev, items: next, total: newTotal } : prev);
+    }
   }
 
   const total = calcTotal(orderItems);
@@ -371,66 +383,114 @@ export default function OrderPage() {
         </div>
       ) : (
         /* CART TAB — grouped by seat */
-        <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(80px+env(safe-area-inset-bottom))] space-y-5">
-          {orderItems.length === 0 && (
-            <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>Το καλάθι είναι άδειο</p>
-          )}
-          {Array.from(seatGroups.entries())
-            .sort(([a], [b]) => (a ?? 999) - (b ?? 999))
-            .map(([seat, group]) => (
-              <div key={seat ?? "none"}>
-                {showSeatPicker && (
-                  <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">
-                    {seat !== null ? `Θεση ${seat}` : "Χωρις θεση"}
-                  </p>
-                )}
-                <div className="space-y-2">
-                  {group.map((item) => (
-                    <div
-                      key={item.id}
-                      className="flex items-center justify-between rounded-2xl px-4 min-h-[64px]"
-                      style={{ background: "var(--c-surface)" }}
-                    >
-                      <div className="flex-1 py-3">
-                        <p className="font-semibold text-sm" style={{ color: "var(--c-text)" }}>{item.name}</p>
-                        <p className="text-xs mt-0.5" style={{ color: "var(--c-text2)" }}>
-                          {item.price.toFixed(2)}€ × {item.quantity}
-                          {" = "}
-                          <span className="text-gray-300 font-medium">
-                            {(item.price * item.quantity).toFixed(2)}€
+        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-5" style={{ paddingBottom: "calc(140px + env(safe-area-inset-bottom))" }}>
+          {orderItems.length === 0 ? (
+            <div className="flex flex-col items-center justify-center mt-20 gap-5">
+              <p className="text-lg font-semibold" style={{ color: "var(--c-text3)" }}>Κενή παραγγελία</p>
+              <button
+                onClick={() => setTab("menu")}
+                className="rounded-2xl px-6 h-12 font-semibold text-sm active:scale-95 transition-transform"
+                style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
+              >
+                ← Μενού
+              </button>
+            </div>
+          ) : (
+            Array.from(seatGroups.entries())
+              .sort(([a], [b]) => (a ?? 999) - (b ?? 999))
+              .map(([seat, group]) => (
+                <div key={seat ?? "none"}>
+                  {showSeatPicker && (
+                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">
+                      {seat !== null ? `Θεση ${seat}` : "Χωρις θεση"}
+                    </p>
+                  )}
+                  <div className="space-y-2">
+                    {group.map((item) => (
+                      <div
+                        key={item.id}
+                        className="flex items-center rounded-2xl px-4 min-h-[56px] gap-2"
+                        style={{ background: "var(--c-surface)" }}
+                      >
+                        {/* Seat badge */}
+                        {item.seat != null && (
+                          <span
+                            className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black"
+                            style={{ background: "var(--c-surface2)", color: "var(--c-text2)" }}
+                          >
+                            Θ{item.seat}
                           </span>
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 pl-3">
+                        )}
+
+                        {/* Name + price */}
+                        <div className="flex-1 py-3 min-w-0">
+                          <p className="font-semibold text-sm truncate" style={{ color: "var(--c-text)" }}>{item.name}</p>
+                          <p className="text-xs mt-0.5" style={{ color: "var(--c-text2)" }}>
+                            {item.price.toFixed(2)}€ × {item.quantity}
+                            {" = "}
+                            <span className="text-gray-300 font-medium">
+                              {(item.price * item.quantity).toFixed(2)}€
+                            </span>
+                          </p>
+                        </div>
+
+                        {/* Qty controls */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => updateItemQty(item.id, item.quantity - 1)}
+                            className="w-[44px] h-[44px] rounded-full flex items-center justify-center text-xl font-bold active:scale-90 transition-all"
+                            style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444" }}
+                            aria-label="Μείωση"
+                          >
+                            −
+                          </button>
+                          <span className="font-black text-base text-center" style={{ minWidth: 32, color: "var(--c-text)" }}>
+                            {item.quantity}
+                          </span>
+                          <button
+                            onClick={() => updateItemQty(item.id, item.quantity + 1)}
+                            className="w-[44px] h-[44px] rounded-full flex items-center justify-center text-xl font-bold active:scale-90 transition-all"
+                            style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e" }}
+                            aria-label="Αύξηση"
+                          >
+                            +
+                          </button>
+                        </div>
+
+                        {/* Trash / direct delete */}
                         <button
                           onClick={() => removeItem(item.id)}
-                          className="w-11 h-11 rounded-full flex items-center justify-center text-xl font-bold active:scale-90 transition-all"
-                          style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
+                          className="w-[44px] h-[44px] rounded-full flex items-center justify-center active:scale-90 transition-all shrink-0"
+                          style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444" }}
+                          aria-label="Διαγραφή"
                         >
-                          −
-                        </button>
-                        <span className="font-black w-5 text-center text-base" style={{ color: "var(--c-text)" }}>
-                          {item.quantity}
-                        </span>
-                        <button
-                          onClick={() => addItem({ id: item.menu_item_id, name: item.name, price: item.price } as DbMenuItem)}
-                          className="w-11 h-11 rounded-full flex items-center justify-center text-xl font-bold active:scale-90 transition-all"
-                          style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
-                        >
-                          +
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4h6v3M3 7h18" />
+                          </svg>
                         </button>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))
+          )}
         </div>
       )}
 
       {/* Send to kitchen CTA */}
       {orderItems.length > 0 && (
         <div className="border-t px-4 py-3 pb-safe" style={{ background: "var(--c-surface)", borderColor: "var(--c-border)" }}>
+          {tab === "cart" && (
+            <div className="flex items-center justify-between mb-3 px-1">
+              <span className="text-sm font-medium" style={{ color: "var(--c-text2)" }}>Σύνολο</span>
+              <span
+                className="font-black"
+                style={{ fontSize: 22, color: !minOk ? "#f59e0b" : "var(--c-text)" }}
+              >
+                {total.toFixed(2)}€
+              </span>
+            </div>
+          )}
           <button
             onClick={sendToKitchen}
             disabled={sending}

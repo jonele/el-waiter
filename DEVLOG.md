@@ -31,3 +31,9 @@
 - tables/page.tsx: 💳 button on occupied tables, amber pending badge, green/grey resolution flash
 - Kitchen status badge per table: 🍳 amber (pending/in_progress) or ✅ green (done)
 - supabase.ts: BillRequest interface
+
+## 2026-03-06 — Order Builder: Add/Remove Items
+- Cart items: −/+ qty buttons (44px, red/green tinted), trash button, seat badge pill
+- removeItem() + updateItemQty() persist to IndexedDB and update order total
+- Empty cart: "Κενή παραγγελία" + "← Μενού" button
+- Running total visible above Αποστολή button in cart tab
