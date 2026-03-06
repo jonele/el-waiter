@@ -1,13 +1,13 @@
 {
-  "name": "EL-POS Σερβιτόρος",
-  "short_name": "Σερβιτόρος",
+  "name": "EL Waiter",
+  "short_name": "EL Waiter",
   "description": "Εφαρμογή σερβιτόρου — EL Value",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
-  "background_color": "#030712",
-  "theme_color": "#1E3A5F",
+  "background_color": "#0F0F0F",
+  "theme_color": "#3B82F6",
   "lang": "el",
   "icons": [
     {

@@ -37,3 +37,8 @@
 - removeItem() + updateItemQty() persist to IndexedDB and update order total
 - Empty cart: "Κενή παραγγελία" + "← Μενού" button
 - Running total visible above Αποστολή button in cart tab
+
+## 2026-03-07 — PWA Fix: Icons + Manifest
+- Generated icon-192.png + icon-512.png (dark bg, blue rounded rect, white "EW")
+- manifest.json: name "EL Waiter", theme_color #3B82F6, background_color #0F0F0F
+- PWA now installable via "Add to Home Screen" on iOS Safari and Android Chrome
