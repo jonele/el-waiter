@@ -7,6 +7,7 @@ export interface DbWaiterProfile {
   icon: string;
   color: string;
   pin?: string;
+  role?: string;
   active: boolean;
   sort_order: number;
 }
