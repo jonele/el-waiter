@@ -438,7 +438,7 @@ export default function OrderPage() {
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             onClick={() => updateItemQty(item.id, item.quantity - 1)}
-                            className="w-[44px] h-[44px] rounded-full flex items-center justify-center text-xl font-bold active:scale-90 transition-all"
+                            className="w-[52px] h-[52px] rounded-full flex items-center justify-center text-xl font-bold active:scale-90 transition-all"
                             style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444" }}
                             aria-label="Μείωση"
                           >
@@ -449,7 +449,7 @@ export default function OrderPage() {
                           </span>
                           <button
                             onClick={() => updateItemQty(item.id, item.quantity + 1)}
-                            className="w-[44px] h-[44px] rounded-full flex items-center justify-center text-xl font-bold active:scale-90 transition-all"
+                            className="w-[52px] h-[52px] rounded-full flex items-center justify-center text-xl font-bold active:scale-90 transition-all"
                             style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e" }}
                             aria-label="Αύξηση"
                           >
@@ -460,7 +460,7 @@ export default function OrderPage() {
                         {/* Trash / direct delete */}
                         <button
                           onClick={() => removeItem(item.id)}
-                          className="w-[44px] h-[44px] rounded-full flex items-center justify-center active:scale-90 transition-all shrink-0"
+                          className="w-[52px] h-[52px] rounded-full flex items-center justify-center active:scale-90 transition-all shrink-0"
                           style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444" }}
                           aria-label="Διαγραφή"
                         >

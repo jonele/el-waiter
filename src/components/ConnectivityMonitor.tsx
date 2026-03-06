@@ -5,7 +5,7 @@ import { waiterDb } from "@/lib/waiterDb";
 import { supabase } from "@/lib/supabase";
 
 export default function ConnectivityMonitor() {
-  const { waiter, settings, setOnline, setPendingSyncs } = useWaiterStore();
+  const { waiter, setOnline, setPendingSyncs } = useWaiterStore();
 
   useEffect(() => {
     function update() { setOnline(navigator.onLine); }

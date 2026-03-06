@@ -167,6 +167,7 @@ export default function TablesPage() {
         to_table_name: to.name,
         waiter_id: waiter.id,
         waiter_name: waiter.name,
+        status: "pending" as const,
       })
       .select("id")
       .single();
