@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import BottomNav from "@/components/BottomNav";
 import type { DbTable, DbFloorSection, DbOrder } from "@/lib/waiterDb";
 import type { Theme } from "@/store/waiterStore";
+import type { BillRequest } from "@/lib/supabase";
 
 const STATUS_BG: Record<string, { bg: string; border: string; dot: string; dotCls: string }> = {
   free:     { bg: "var(--c-free)",  border: "var(--c-free-b)",  dot: "var(--status-free-dot, #4ade80)",  dotCls: "animate-pulse" },
@@ -32,11 +33,28 @@ export default function TablesPage() {
   const [pendingMoveId, setPendingMoveId] = useState<string | null>(null);
   const [moveDenied, setMoveDenied] = useState<string | null>(null);
 
+  // Bill request state
+  const [pendingBillTableId, setPendingBillTableId] = useState<string | null>(null);
+  const [billFlash, setBillFlash] = useState<{ tableId: string; type: "processed" | "cancelled" } | null>(null);
+
+  // Kitchen orders state: map of table_name -> latest status
+  const [kitchenStatus, setKitchenStatus] = useState<Record<string, "pending" | "in_progress" | "done">>({});
+
   useEffect(() => {
     if (!waiter) { router.replace("/"); return; }
     loadLocal();
-    if (isOnline) syncFromSupabase();
+    if (isOnline) {
+      syncFromSupabase();
+      fetchKitchenOrders();
+    }
   }, [waiter, waiter!.venue_id]);
+
+  // Cleanup bill subscription on unmount
+  useEffect(() => {
+    return () => {
+      if (supabase) void supabase.removeAllChannels();
+    };
+  }, []);
 
   async function loadLocal() {
     const [secs, tbls, orders] = await Promise.all([
@@ -76,6 +94,65 @@ export default function TablesPage() {
       loadLocal();
     } catch {}
     setSyncing(false);
+  }
+
+  async function fetchKitchenOrders() {
+    if (!supabase || !waiter) return;
+    const { data } = await supabase
+      .from("kitchen_orders")
+      .select("tab_name, status, created_at")
+      .eq("venue_id", waiter.venue_id)
+      .order("created_at", { ascending: false });
+    if (!data) return;
+    // Keep only the latest order per tab_name
+    const map: Record<string, "pending" | "in_progress" | "done"> = {};
+    for (const row of data) {
+      if (!map[row.tab_name]) {
+        map[row.tab_name] = row.status as "pending" | "in_progress" | "done";
+      }
+    }
+    setKitchenStatus(map);
+  }
+
+  async function submitBillRequest(t: DbTable) {
+    if (!supabase || !waiter) return;
+    if (pendingBillTableId === t.id) return; // already pending
+    const { data, error } = await supabase
+      .from("bill_requests")
+      .insert({
+        venue_id: waiter.venue_id,
+        table_id: t.id,
+        table_name: t.name,
+        waiter_id: waiter.id,
+        waiter_name: waiter.name,
+        status: "pending",
+      })
+      .select("id")
+      .single();
+    if (error || !data) return;
+    setPendingBillTableId(t.id);
+    subscribeToBillRequest(data.id as string, t.id);
+  }
+
+  function subscribeToBillRequest(requestId: string, tableId: string) {
+    if (!supabase) return;
+    const channel = supabase
+      .channel(`bill-request-${requestId}`)
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "bill_requests",
+        filter: `id=eq.${requestId}`,
+      }, (payload) => {
+        const row = payload.new as BillRequest;
+        if (row.status === "processed" || row.status === "cancelled") {
+          setPendingBillTableId(null);
+          setBillFlash({ tableId, type: row.status });
+          setTimeout(() => setBillFlash(null), 2500);
+          void supabase!.removeChannel(channel);
+        }
+      })
+      .subscribe();
   }
 
   async function submitMoveRequest(from: DbTable, to: DbTable) {
@@ -247,6 +324,9 @@ export default function TablesPage() {
             const isPendingMove = pendingMoveTableId === t.id;
             const isDenied = moveDenied === t.id;
             const isOccupied = t.status === "occupied" || orderTotals[t.id] !== undefined;
+            const isPendingBill = pendingBillTableId === t.id;
+            const isBillFlash = billFlash?.tableId === t.id;
+            const kitchenSt = kitchenStatus[t.name];
             return (
               <button
                 key={t.id}
@@ -254,11 +334,13 @@ export default function TablesPage() {
                 className="relative flex flex-col items-center justify-center gap-1 rounded-3xl border-2 min-h-[96px] px-2 py-4 transition-transform active:scale-90 duration-100"
                 style={{ background: st.bg, borderColor: st.border }}
               >
-                {/* Status dot */}
-                <span
-                  className={`absolute top-2.5 right-2.5 h-2.5 w-2.5 rounded-full ${st.dotCls}`}
-                  style={{ background: st.dot }}
-                />
+                {/* Status dot — hide on occupied when bill button shown */}
+                {!isOccupied && (
+                  <span
+                    className={`absolute top-2.5 right-2.5 h-2.5 w-2.5 rounded-full ${st.dotCls}`}
+                    style={{ background: st.dot }}
+                  />
+                )}
                 {!minOk && (
                   <span className="absolute top-2 left-2 text-xs text-amber-400 leading-none">⚠</span>
                 )}
@@ -272,6 +354,49 @@ export default function TablesPage() {
                   >
                     ⇄
                   </button>
+                )}
+
+                {/* Bill request button — top-right, only on occupied tables */}
+                {isOccupied && !isPendingMove && !isBillFlash && (
+                  <button
+                    className="absolute top-1.5 right-1.5 w-9 h-9 rounded-xl flex items-center justify-center text-base transition-transform active:scale-90"
+                    style={{
+                      background: isPendingBill ? "rgba(245,158,11,0.35)" : "rgba(255,255,255,0.12)",
+                      color: isPendingBill ? "#fbbf24" : "var(--c-card-text)",
+                    }}
+                    onClick={(e) => { e.stopPropagation(); void submitBillRequest(t); }}
+                    aria-label="Αίτημα λογαριασμού"
+                  >
+                    💳
+                  </button>
+                )}
+
+                {/* Bill pending badge */}
+                {isPendingBill && !isBillFlash && (
+                  <span className="absolute bottom-1.5 right-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none"
+                    style={{ background: "rgba(245,158,11,0.3)", color: "#fbbf24" }}>
+                    Ζητήθηκε
+                  </span>
+                )}
+
+                {/* Bill flash feedback */}
+                {isBillFlash && billFlash && (
+                  <div className={`absolute inset-0 rounded-3xl flex flex-col items-center justify-center ${billFlash.type === "processed" ? "bg-green-900/70" : "bg-zinc-800/80"}`}>
+                    <span className="text-lg leading-none">{billFlash.type === "processed" ? "✓" : "✕"}</span>
+                    <span className="text-xs font-semibold mt-1" style={{ color: billFlash.type === "processed" ? "#86efac" : "#a1a1aa" }}>
+                      {billFlash.type === "processed" ? "Εξοφλήθηκε" : "Ακυρώθηκε"}
+                    </span>
+                  </div>
+                )}
+
+                {/* Kitchen status badge */}
+                {kitchenSt && !isPendingMove && !isBillFlash && (
+                  <span
+                    className="absolute bottom-1.5 left-1.5 text-sm leading-none"
+                    title={kitchenSt === "done" ? "Έτοιμο" : "Στην κουζίνα"}
+                  >
+                    {kitchenSt === "done" ? "✅" : "🍳"}
+                  </span>
                 )}
 
                 <span className="text-2xl font-black leading-none" style={{ color: "var(--c-card-text)" }}>

@@ -6,6 +6,18 @@ const key  = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 export const supabase: SupabaseClient | null =
   url && key ? createClient(url, key) : null;
 
+export interface BillRequest {
+  id: string;
+  venue_id: string;
+  table_id: string | null;
+  table_name: string;
+  waiter_id: string;
+  waiter_name: string;
+  status: 'pending' | 'processed' | 'cancelled';
+  created_at: string;
+  processed_at: string | null;
+}
+
 export interface TableMoveRequest {
   id: string;
   venue_id: string;

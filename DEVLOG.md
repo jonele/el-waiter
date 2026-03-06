@@ -26,3 +26,8 @@
   - subscribeToApproval() listens realtime; approved → Dexie update; denied → red overlay
   - Amber overlay while pending, destination picker bottom sheet
 - supabase.ts: TableMoveRequest interface added
+
+## 2026-03-06 — Bill Request Button + Kitchen Status Badges
+- tables/page.tsx: 💳 button on occupied tables, amber pending badge, green/grey resolution flash
+- Kitchen status badge per table: 🍳 amber (pending/in_progress) or ✅ green (done)
+- supabase.ts: BillRequest interface
