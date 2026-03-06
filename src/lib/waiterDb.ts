@@ -58,6 +58,7 @@ export interface DbOrderItem {
   price: number;
   quantity: number;
   notes?: string;
+  seat?: number;
 }
 
 export type PaymentMethod = "cash" | "card_lan" | "card_bt" | "preorder";

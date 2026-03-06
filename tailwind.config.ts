@@ -5,12 +5,12 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        brand: "#1E3A5F",
-        accent: "#00B4D8",
+        brand: "#3B82F6",
+        accent: "#10B981",
         status: {
-          free:     "#16a34a",
-          occupied: "#d97706",
-          waiting:  "#dc2626",
+          free:     "#4ADE80",
+          occupied: "#60A5FA",
+          waiting:  "#FBBF24",
         },
       },
       spacing: {
