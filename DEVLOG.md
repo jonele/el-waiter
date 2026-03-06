@@ -19,3 +19,10 @@
 - All screens (tables, order, settings, BottomNav) use var(--c-*) for bg/text/border
 - Status card backgrounds theme-aware (dark emerald/blue/amber → pastel on light theme)
 - DeviceSettings: Web Apps (EL Waiter, KDS, Kiosk) moved OUT of PIN-locked Technician Tools — now always-visible top-level section
+
+## 2026-03-06 — Table Bump/Move Auth + TableMoveRequest type
+- tables/page.tsx: waiter can request table move via ⇄ button on occupied tables
+  - submitMoveRequest() inserts into Supabase table_move_requests
+  - subscribeToApproval() listens realtime; approved → Dexie update; denied → red overlay
+  - Amber overlay while pending, destination picker bottom sheet
+- supabase.ts: TableMoveRequest interface added

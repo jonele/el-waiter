@@ -5,7 +5,7 @@ import { waiterDb } from "@/lib/waiterDb";
 import { useWaiterStore } from "@/store/waiterStore";
 import { supabase } from "@/lib/supabase";
 import BottomNav from "@/components/BottomNav";
-import type { DbTable, DbFloorSection } from "@/lib/waiterDb";
+import type { DbTable, DbFloorSection, DbOrder } from "@/lib/waiterDb";
 import type { Theme } from "@/store/waiterStore";
 
 const STATUS_BG: Record<string, { bg: string; border: string; dot: string; dotCls: string }> = {
@@ -25,6 +25,12 @@ export default function TablesPage() {
   const [orderTotals, setOrderTotals] = useState<Record<string, number>>({});
   const [activeSection, setActiveSection] = useState<string>("all");
   const [syncing, setSyncing] = useState(false);
+
+  // Move request state
+  const [moveReqSource, setMoveReqSource] = useState<DbTable | null>(null);
+  const [pendingMoveTableId, setPendingMoveTableId] = useState<string | null>(null);
+  const [pendingMoveId, setPendingMoveId] = useState<string | null>(null);
+  const [moveDenied, setMoveDenied] = useState<string | null>(null);
 
   useEffect(() => {
     if (!waiter) { router.replace("/"); return; }
@@ -70,6 +76,65 @@ export default function TablesPage() {
       loadLocal();
     } catch {}
     setSyncing(false);
+  }
+
+  async function submitMoveRequest(from: DbTable, to: DbTable) {
+    if (!supabase || !waiter) return;
+    const { data, error } = await supabase
+      .from("table_move_requests")
+      .insert({
+        venue_id: waiter.venue_id,
+        from_table_id: from.id,
+        from_table_name: from.name,
+        to_table_id: to.id,
+        to_table_name: to.name,
+        waiter_id: waiter.id,
+        waiter_name: waiter.name,
+      })
+      .select("id")
+      .single();
+    if (error || !data) return;
+    setPendingMoveId(data.id);
+    setPendingMoveTableId(from.id);
+    setMoveReqSource(null);
+    subscribeToApproval(data.id, from, to);
+  }
+
+  function subscribeToApproval(requestId: string, from: DbTable, to: DbTable) {
+    if (!supabase) return;
+    const channel = supabase
+      .channel(`move-approval-${requestId}`)
+      .on("postgres_changes", {
+        event: "UPDATE",
+        schema: "public",
+        table: "table_move_requests",
+        filter: `id=eq.${requestId}`,
+      }, async (payload) => {
+        const row = payload.new as { status: string };
+        if (row.status === "approved") {
+          // Move all open/sent orders from `from` table to `to` table in Dexie
+          const orders = await waiterDb.orders
+            .where("table_id").equals(from.id)
+            .filter((o: DbOrder) => o.status === "open" || o.status === "sent")
+            .toArray();
+          for (const o of orders) {
+            await waiterDb.orders.update(o.id, { table_id: to.id, table_name: to.name });
+          }
+          await waiterDb.posTables.update(from.id, { status: "free" });
+          await waiterDb.posTables.update(to.id, { status: "occupied" });
+          setPendingMoveId(null);
+          setPendingMoveTableId(null);
+          loadLocal();
+          void supabase!.removeChannel(channel);
+        } else if (row.status === "denied") {
+          setPendingMoveId(null);
+          setPendingMoveTableId(null);
+          setMoveDenied(from.id);
+          setTimeout(() => setMoveDenied(null), 2500);
+          void supabase!.removeChannel(channel);
+        }
+      })
+      .subscribe();
   }
 
   const filtered = activeSection === "all"
@@ -179,6 +244,9 @@ export default function TablesPage() {
             const total = orderTotals[t.id];
             const minOk = !settings.minConsumptionEur || !total || total >= settings.minConsumptionEur;
             const st = STATUS_BG[t.status] ?? STATUS_BG.free;
+            const isPendingMove = pendingMoveTableId === t.id;
+            const isDenied = moveDenied === t.id;
+            const isOccupied = t.status === "occupied" || orderTotals[t.id] !== undefined;
             return (
               <button
                 key={t.id}
@@ -194,6 +262,18 @@ export default function TablesPage() {
                 {!minOk && (
                   <span className="absolute top-2 left-2 text-xs text-amber-400 leading-none">⚠</span>
                 )}
+
+                {/* Move button — only on occupied tables that are not pending */}
+                {isOccupied && !isPendingMove && (
+                  <button
+                    className="absolute top-1.5 left-1.5 w-9 h-9 rounded-xl flex items-center justify-center text-base font-bold transition-transform active:scale-90"
+                    style={{ background: "rgba(245,158,11,0.25)", color: "#fbbf24" }}
+                    onClick={(e) => { e.stopPropagation(); setMoveReqSource(t); }}
+                  >
+                    ⇄
+                  </button>
+                )}
+
                 <span className="text-2xl font-black leading-none" style={{ color: "var(--c-card-text)" }}>
                   {t.name}
                 </span>
@@ -205,11 +285,87 @@ export default function TablesPage() {
                     {total.toFixed(2)}€
                   </span>
                 )}
+
+                {/* Pending move overlay */}
+                {isPendingMove && (
+                  <div className="absolute inset-0 bg-amber-900/70 rounded-3xl flex flex-col items-center justify-center">
+                    <span className="text-2xl leading-none">⏳</span>
+                    <span className="text-xs font-semibold mt-1" style={{ color: "#fcd34d" }}>Αναμένεται...</span>
+                  </div>
+                )}
+
+                {/* Denied overlay */}
+                {isDenied && (
+                  <div className="absolute inset-0 bg-red-900/70 rounded-3xl flex flex-col items-center justify-center">
+                    <span className="text-sm font-bold" style={{ color: "#fca5a5" }}>✗ Απορρίφθηκε</span>
+                  </div>
+                )}
               </button>
             );
           })}
         </div>
       </div>
+
+      {/* Move destination bottom sheet */}
+      {moveReqSource && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60"
+          onClick={() => setMoveReqSource(null)}
+        >
+          <div
+            className="fixed bottom-0 left-0 right-0 rounded-t-3xl overflow-y-auto"
+            style={{ background: "var(--c-header)", maxHeight: "80vh" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* drag handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full" style={{ background: "var(--c-border)" }} />
+            </div>
+            {/* header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "var(--c-border)" }}>
+              <p className="font-bold text-base" style={{ color: "var(--c-text)" }}>
+                Μεταφορά από {moveReqSource.name}
+              </p>
+              <button
+                className="w-10 h-10 flex items-center justify-center rounded-xl transition-opacity active:opacity-50"
+                style={{ color: "var(--c-text2)" }}
+                onClick={() => setMoveReqSource(null)}
+              >✕</button>
+            </div>
+            {/* table grid — exclude source table, show all other active tables */}
+            <div className="p-4 grid grid-cols-3 gap-3 sm:grid-cols-4 pb-[calc(32px+env(safe-area-inset-bottom))]">
+              {tables
+                .filter(t => t.id !== moveReqSource.id && t.is_active)
+                .map(t => {
+                  const isFree = !orderTotals[t.id];
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => submitMoveRequest(moveReqSource, t)}
+                      className="relative flex flex-col items-center justify-center gap-1 rounded-3xl border-2 min-h-[88px] px-2 py-3 transition-transform active:scale-90 duration-100"
+                      style={{
+                        background: isFree ? "#0D2818" : "#0D1B2E",
+                        borderColor: isFree ? "#166534" : "#1E3A8A",
+                      }}
+                    >
+                      <span className="text-xl font-black leading-none" style={{ color: "var(--c-card-text)" }}>
+                        {t.name}
+                      </span>
+                      {orderTotals[t.id] !== undefined && (
+                        <span className="text-[10px] font-semibold rounded-full px-2 py-0.5" style={{ background: "rgba(0,0,0,0.25)", color: "var(--c-card-text)" }}>
+                          {orderTotals[t.id].toFixed(2)}€
+                        </span>
+                      )}
+                      <span className="text-[10px]" style={{ color: isFree ? "#4ADE80" : "#60A5FA" }}>
+                        {isFree ? "Ελεύθερο" : "Πιασμένο"}
+                      </span>
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+        </div>
+      )}
 
       <BottomNav />
     </div>
