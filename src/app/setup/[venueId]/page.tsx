@@ -1,9 +1,9 @@
 "use client";
-import { useEffect } from "react";
+import { Suspense, useEffect } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import { useWaiterStore } from "@/store/waiterStore";
 
-export default function SetupPage() {
+function SetupInner() {
   const router = useRouter();
   const params = useParams();
   const search = useSearchParams();
@@ -13,7 +13,6 @@ export default function SetupPage() {
     const venueId = params.venueId as string;
     const t = search.get("t");
 
-    // Validate time window if present (±1 window = ±5 min)
     if (t) {
       const window = Math.floor(Date.now() / 300000);
       if (Math.abs(window - parseInt(t)) > 1) {
@@ -30,12 +29,19 @@ export default function SetupPage() {
     }
   }, []);
 
+  return null;
+}
+
+export default function SetupPage() {
   return (
     <div style={{
       minHeight: "100dvh", background: "#0F0F0F",
       display: "flex", alignItems: "center", justifyContent: "center",
     }}>
       <p style={{ color: "#6B7280", fontSize: 14 }}>Ρύθμιση συσκευής...</p>
+      <Suspense>
+        <SetupInner />
+      </Suspense>
     </div>
   );
 }

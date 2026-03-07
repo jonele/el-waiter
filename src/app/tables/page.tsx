@@ -26,6 +26,7 @@ export default function TablesPage() {
   const [orderTotals, setOrderTotals] = useState<Record<string, number>>({});
   const [activeSection, setActiveSection] = useState<string>("all");
   const [syncing, setSyncing] = useState(false);
+  const [tableSearch, setTableSearch] = useState("");
 
   // Move request state
   const [moveReqSource, setMoveReqSource] = useState<DbTable | null>(null);
@@ -215,9 +216,19 @@ export default function TablesPage() {
       .subscribe();
   }
 
-  const filtered = activeSection === "all"
-    ? tables
-    : tables.filter((t) => t.floor_section_id === activeSection);
+  const filtered = tables
+    .filter((t) => activeSection === "all" || t.floor_section_id === activeSection)
+    .filter((t) => !tableSearch || t.name.toLowerCase().includes(tableSearch.toLowerCase()));
+
+  // Jump directly to table if exact match
+  function handleTableSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Enter" && tableSearch) {
+      const exact = filtered.find(
+        (t) => t.name.toLowerCase() === tableSearch.toLowerCase()
+      ) || filtered[0];
+      if (exact) { openTable(exact); setTableSearch(""); }
+    }
+  }
 
   function openTable(t: DbTable) {
     useWaiterStore.getState().setActiveTable(t);
@@ -309,15 +320,33 @@ export default function TablesPage() {
         </div>
       )}
 
+      {/* Table number search bar */}
+      <div className="px-4 pt-3 pb-1 shrink-0">
+        <input
+          type="text"
+          inputMode="numeric"
+          value={tableSearch}
+          onChange={(e) => setTableSearch(e.target.value)}
+          onKeyDown={handleTableSearchKey}
+          placeholder="Αριθμός τραπεζιού..."
+          className="w-full rounded-2xl px-4 py-3 text-base font-semibold outline-none"
+          style={{
+            background: "var(--c-surface2)",
+            color: "var(--c-text)",
+            border: `1.5px solid ${tableSearch ? "var(--brand, #3B82F6)" : "var(--c-border)"}`,
+          }}
+        />
+      </div>
+
       {/* Tables grid */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 pb-[calc(80px+env(safe-area-inset-bottom))]">
+      <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(80px+env(safe-area-inset-bottom))]">
         {syncing && tables.length === 0 && (
           <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>Συγχρονισμός...</p>
         )}
         {!syncing && filtered.length === 0 && (
           <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>Δεν βρέθηκαν τραπέζια</p>
         )}
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
+        <div className="grid grid-cols-3 gap-3">
           {filtered.map((t) => {
             const total = orderTotals[t.id];
             const minOk = !settings.minConsumptionEur || !total || total >= settings.minConsumptionEur;
