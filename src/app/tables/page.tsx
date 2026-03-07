@@ -90,6 +90,10 @@ export default function TablesPage() {
           floor_section_id: t.floor_section_id, capacity: t.capacity ?? 4,
           status: t.status ?? "free", sort_order: t.sort_order ?? 0,
           is_active: t.is_active ?? true,
+          seated_customer_name: t.seated_customer_name ?? null,
+          seated_covers: t.seated_covers ?? null,
+          seated_allergies: (t.seated_allergies as string[] | null) ?? [],
+          seated_dietary: (t.seated_dietary as string[] | null) ?? [],
         })));
       }
       loadLocal();
@@ -435,12 +439,47 @@ export default function TablesPage() {
                 <span className="text-2xl font-black leading-none" style={{ color: "var(--c-card-text)" }}>
                   {t.name}
                 </span>
+                {isOccupied && t.seated_customer_name && (
+                  <span
+                    className="text-xs leading-none max-w-[80px] truncate"
+                    style={{ color: "var(--c-text2)" }}
+                  >
+                    {"👤 "}
+                    {t.seated_customer_name.length > 16
+                      ? t.seated_customer_name.slice(0, 16) + "…"
+                      : t.seated_customer_name}
+                    {t.seated_covers ? ` · ${t.seated_covers}p` : ""}
+                  </span>
+                )}
                 {total !== undefined && (
                   <span
                     className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
                     style={{ background: "rgba(0,0,0,0.25)", color: "var(--c-card-text)" }}
                   >
                     {total.toFixed(2)}€
+                  </span>
+                )}
+                {/* Allergy / dietary badges — bottom-left, above kitchen badge */}
+                {((t.seated_allergies && t.seated_allergies.length > 0) || (t.seated_dietary && t.seated_dietary.length > 0)) && !isPendingMove && !isBillFlash && (
+                  <span
+                    className="absolute bottom-1.5 left-8 flex items-center gap-1"
+                  >
+                    {t.seated_allergies && t.seated_allergies.length > 0 && (
+                      <span
+                        className="rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none"
+                        style={{ background: "rgba(239,68,68,0.25)", color: "#fca5a5" }}
+                      >
+                        {"⚠ "}{t.seated_allergies.length}
+                      </span>
+                    )}
+                    {t.seated_dietary && t.seated_dietary.length > 0 && (
+                      <span
+                        className="rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none"
+                        style={{ background: "rgba(16,185,129,0.2)", color: "#6ee7b7" }}
+                      >
+                        {"🌱"}
+                      </span>
+                    )}
                   </span>
                 )}
 

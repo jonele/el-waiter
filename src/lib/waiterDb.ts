@@ -29,6 +29,10 @@ export interface DbTable {
   status: "free" | "occupied" | "waiting";
   sort_order: number;
   is_active: boolean;
+  seated_customer_name?: string | null;
+  seated_covers?: number | null;
+  seated_allergies?: string[];
+  seated_dietary?: string[];
 }
 
 export interface DbMenuCategory {

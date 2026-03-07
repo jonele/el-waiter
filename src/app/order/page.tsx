@@ -311,6 +311,41 @@ export default function OrderPage() {
         )}
       </div>
 
+      {/* Allergy / dietary alert panel */}
+      {((activeTable?.seated_allergies && activeTable.seated_allergies.length > 0) ||
+        (activeTable?.seated_dietary && activeTable.seated_dietary.length > 0)) && (
+        <div
+          style={{
+            margin: "8px 12px 0",
+            padding: "10px 14px",
+            borderRadius: "12px",
+            background: "rgba(245,158,11,0.15)",
+            border: "1px solid rgba(245,158,11,0.4)",
+          }}
+        >
+          {activeTable?.seated_allergies && activeTable.seated_allergies.length > 0 && (
+            <p style={{ margin: 0, fontSize: "13px", lineHeight: "1.4" }}>
+              <span style={{ color: "#F59E0B", fontWeight: 700 }}>
+                {"⚠️ ΑΛΛΕΡΓΙΕΣ: "}
+              </span>
+              <span style={{ color: "#fcd34d" }}>
+                {activeTable.seated_allergies.join(", ")}
+              </span>
+            </p>
+          )}
+          {activeTable?.seated_dietary && activeTable.seated_dietary.length > 0 && (
+            <p style={{ margin: "4px 0 0", fontSize: "13px", lineHeight: "1.4" }}>
+              <span style={{ color: "#10B981" }}>
+                {"🌱 "}
+              </span>
+              <span style={{ color: "#6ee7b7" }}>
+                {activeTable.seated_dietary.join(", ")}
+              </span>
+            </p>
+          )}
+        </div>
+      )}
+
       {/* MENU TAB */}
       {tab === "menu" ? (
         <div className="flex flex-1 overflow-hidden">
