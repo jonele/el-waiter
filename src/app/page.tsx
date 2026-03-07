@@ -124,27 +124,40 @@ export default function LoginPage() {
 
       {/* Manual fallback */}
       <div style={{ width: "100%", maxWidth: 320, marginTop: 8 }}>
-        <p style={{ color: "#6B7280", fontSize: 12, textAlign: "center", marginBottom: 8 }}>ή εισάγετε χειροκίνητα</p>
+        <p style={{ color: "#6B7280", fontSize: 12, textAlign: "center", marginBottom: 8 }}>ή εισάγετε χειροκίνητα το Venue ID</p>
         <input
           value={setupInput}
           onChange={(e) => { setSetupInput(e.target.value); setSetupError(""); }}
-          placeholder="Venue UUID (xxxxxxxx-xxxx-...)"
+          placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+          autoComplete="off"
           style={{
             width: "100%", background: "#1F2937", color: "#fff", borderRadius: 12,
-            border: "1px solid #374151", padding: "12px 14px", fontSize: 13,
-            outline: "none", boxSizing: "border-box",
+            border: `1px solid ${setupError ? "#EF4444" : setupInput.length > 0 ? "#3B82F6" : "#374151"}`,
+            padding: "12px 14px", fontSize: 13,
+            outline: "none", boxSizing: "border-box", transition: "border-color 0.2s",
           }}
         />
-        {setupError && <p style={{ color: "#F87171", fontSize: 12, marginTop: 6 }}>{setupError}</p>}
+        {setupError && (
+          <p style={{
+            color: "#F87171", fontSize: 13, marginTop: 8, fontWeight: 600,
+            background: "#450a0a", borderRadius: 8, padding: "8px 12px",
+          }}>
+            ⚠️ {setupError}
+          </p>
+        )}
         <button
           onClick={handleSetupManual}
+          disabled={setupInput.trim().length === 0}
           style={{
-            width: "100%", marginTop: 10, background: "#3B82F6", color: "#fff",
+            width: "100%", marginTop: 10,
+            background: setupInput.trim().length === 0 ? "#1F2937" : "#3B82F6",
+            color: setupInput.trim().length === 0 ? "#4B5563" : "#fff",
             borderRadius: 14, padding: "14px 0", fontWeight: 700, fontSize: 15,
-            border: "none", cursor: "pointer",
+            border: "none", cursor: setupInput.trim().length === 0 ? "not-allowed" : "pointer",
+            transition: "all 0.2s",
           }}
         >
-          Αποθήκευση
+          {setupInput.trim().length === 0 ? "Εισάγετε Venue ID" : "Αποθήκευση →"}
         </button>
       </div>
     </div>
