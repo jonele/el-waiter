@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { waiterDb, getOpenOrder, calcTotal } from "@/lib/waiterDb";
 import { useWaiterStore } from "@/store/waiterStore";
+import { supabase } from "@/lib/supabase";
 import type { DbOrder, PaymentMethod } from "@/lib/waiterDb";
 
 const QUICK_TIPS = [0.5, 1, 2, 5];
