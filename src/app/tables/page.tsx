@@ -201,6 +201,9 @@ export default function TablesPage() {
           }
           await waiterDb.posTables.update(from.id, { status: "free" });
           await waiterDb.posTables.update(to.id, { status: "occupied" });
+          // Sync to Supabase pos_tables so EL-POS HostessPanel + EL-Loyal Hostess reflect the move
+          void supabase!.from("pos_tables").update({ status: "free" }).eq("id", from.id);
+          void supabase!.from("pos_tables").update({ status: "occupied" }).eq("id", to.id);
           setPendingMoveId(null);
           setPendingMoveTableId(null);
           loadLocal();
