@@ -135,6 +135,8 @@ export default function TablesPage() {
       .select("id")
       .single();
     if (error || !data) return;
+    // Update pos_table status so RSRV floor plan shows amber "leaving soon"
+    void supabase.from("pos_tables").update({ status: "bill_requested" }).eq("id", t.id);
     setPendingBillTableId(t.id);
     subscribeToBillRequest(data.id as string, t.id);
   }

@@ -81,6 +81,8 @@ export default function PayPage() {
     });
     await waiterDb.posTables.update(activeTable.id, { status: "free" });
     useWaiterStore.getState().setActiveTable({ ...activeTable, status: "free" });
+    // Direct Supabase write so RSRV floor plan updates in real time
+    void supabase?.from("pos_tables").update({ status: "free" }).eq("id", activeTable.id);
   }
 
   if (result === "success") return (
