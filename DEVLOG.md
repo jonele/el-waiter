@@ -42,3 +42,11 @@
 - Generated icon-192.png + icon-512.png (dark bg, blue rounded rect, white "EW")
 - manifest.json: name "EL Waiter", theme_color #3B82F6, background_color #0F0F0F
 - PWA now installable via "Add to Home Screen" on iOS Safari and Android Chrome
+
+## 2026-03-07 — Login Page: QR Scan + PIN Auth
+- Added pin, role, qr_token columns to waiter_profiles (Supabase migration)
+- New QRScanner component (jsqr + getUserMedia, blue overlay frame)
+- Rewrote page.tsx: Device Setup QR → Login (QR or 4-digit PIN)
+- deviceVenueId added to waiterStore (persisted, device-level venue binding)
+- lookupWaiterByPin + lookupWaiterByQrToken added to supabase.ts
+- Settings syncAll now uses deviceVenueId fallback

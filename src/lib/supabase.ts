@@ -30,3 +30,40 @@ export interface TableMoveRequest {
   status: "pending" | "approved" | "denied";
   created_at: string;
 }
+
+export interface WaiterProfile {
+  id: string;
+  venue_id: string;
+  name: string;
+  icon: string;
+  color: string;
+  pin?: string;
+  role?: string;
+  qr_token?: string;
+  active: boolean;
+  sort_order: number;
+}
+
+export async function lookupWaiterByPin(venueId: string, pin: string): Promise<WaiterProfile | null> {
+  if (!supabase) return null;
+  const { data } = await supabase
+    .from("waiter_profiles")
+    .select("id, venue_id, name, icon, color, pin, role, qr_token, active, sort_order")
+    .eq("venue_id", venueId)
+    .eq("pin", pin)
+    .eq("active", true)
+    .single();
+  return data ?? null;
+}
+
+export async function lookupWaiterByQrToken(venueId: string, qrToken: string): Promise<WaiterProfile | null> {
+  if (!supabase) return null;
+  const { data } = await supabase
+    .from("waiter_profiles")
+    .select("id, venue_id, name, icon, color, pin, role, qr_token, active, sort_order")
+    .eq("venue_id", venueId)
+    .eq("qr_token", qrToken)
+    .eq("active", true)
+    .single();
+  return data ?? null;
+}

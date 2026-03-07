@@ -14,7 +14,7 @@ const THEMES: { key: Theme; label: string; icon: string }[] = [
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { waiter, settings, updateSettings, isOnline, pendingSyncs, theme, setTheme, logout } = useWaiterStore();
+  const { waiter, settings, updateSettings, isOnline, pendingSyncs, theme, setTheme, logout, deviceVenueId } = useWaiterStore();
   const [form, setForm] = useState(settings);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
@@ -27,8 +27,8 @@ export default function SettingsPage() {
   }
 
   async function syncAll() {
-    const venueId = waiter?.venue_id;
-    if (!supabase || !venueId) { setSyncMsg("Δεν βρέθηκε Venue ID στο προφίλ σερβιτόρου."); return; }
+    const venueId = deviceVenueId || waiter?.venue_id;
+    if (!supabase || !venueId) { setSyncMsg("Η συσκευή δεν έχει ρυθμιστεί. Επέστρεψε στην αρχική σελίδα."); return; }
     setSyncing(true);
     setSyncMsg("");
     try {
