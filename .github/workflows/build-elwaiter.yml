@@ -1,0 +1,162 @@
+name: Build EL Waiter (Tauri Mobile)
+
+on:
+  push:
+    tags:
+      - 'waiter-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version number (e.g., 1.0.1)'
+        required: true
+        default: '1.0.0'
+
+permissions:
+  contents: write
+
+# ─── iOS ────────────────────────────────────────────────────────────────────
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-ios,x86_64-apple-ios,aarch64-apple-ios-sim
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: 'src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Next.js static export
+        env:
+          NEXT_PUBLIC_TAURI: "1"
+          NEXT_PUBLIC_API_BASE: "https://el-waiter.vercel.app"
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: npm run build:tauri
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VER="${{ github.event.inputs.version }}"
+          else
+            VER="${{ github.ref_name }}"
+            VER="${VER#waiter-v}"
+          fi
+          echo "VERSION=$VER" >> $GITHUB_OUTPUT
+
+      - name: Initialize Tauri iOS project
+        run: npx tauri ios init
+
+      # NOTE: For App Store / TestFlight submission, add Apple code signing secrets:
+      # APPLE_CERTIFICATE (base64 p12), APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+      # APPLE_TEAM_ID, APPLE_PROVISIONING_PROFILE (base64)
+      - name: Build iOS (unsigned — add signing secrets for TestFlight)
+        run: npx tauri ios build --export-method development-void
+        continue-on-error: true
+
+      - name: Upload iOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: el-waiter-ios-${{ steps.version.outputs.VERSION }}
+          path: src-tauri/gen/apple/build/arm64/**/*.ipa
+          if-no-files-found: warn
+
+# ─── Android ────────────────────────────────────────────────────────────────
+  build-android:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android NDK
+        run: echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager "ndk;27.0.12077973" --sdk_root=$ANDROID_HOME
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,i686-linux-android,x86_64-linux-android
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: 'src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Next.js static export
+        env:
+          NEXT_PUBLIC_TAURI: "1"
+          NEXT_PUBLIC_API_BASE: "https://el-waiter.vercel.app"
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: npm run build:tauri
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VER="${{ github.event.inputs.version }}"
+          else
+            VER="${{ github.ref_name }}"
+            VER="${VER#waiter-v}"
+          fi
+          echo "VERSION=$VER" >> $GITHUB_OUTPUT
+
+      - name: Initialize Tauri Android project
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+        run: npx tauri android init
+
+      - name: Build Android APK (debug — add keystore secrets for release)
+        env:
+          NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
+        run: npx tauri android build --debug
+
+      - name: Rename APK
+        id: apk
+        run: |
+          APK=$(find src-tauri/gen/android -name "*.apk" | head -1)
+          if [ -n "$APK" ]; then
+            DEST="EL-Waiter-v${{ steps.version.outputs.VERSION }}.apk"
+            cp "$APK" "$DEST"
+            echo "APK=$DEST" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: el-waiter-android-${{ steps.version.outputs.VERSION }}
+          path: "*.apk"
+          if-no-files-found: warn

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://raw.githubusercontent.com/tauri-apps/tauri/dev/crates/tauri-utils/schema.json",
+  "productName": "EL Waiter",
+  "version": "1.0.0",
+  "identifier": "com.elvalue.elwaiter",
+  "build": {
+    "frontendDist": "../out",
+    "devUrl": "http://localhost:3000",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build:tauri"
+  },
+  "app": {
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "shortDescription": "EL Waiter table service app",
+    "copyright": "EL VALUE P.C. 2026",
+    "category": "Business",
+    "publisher": "EL VALUE P.C.",
+    "iOS": {
+      "developmentTeam": ""
+    },
+    "android": {
+      "minSdkVersion": 24
+    }
+  }
+}

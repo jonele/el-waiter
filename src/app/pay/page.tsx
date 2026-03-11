@@ -6,6 +6,9 @@ import { useWaiterStore } from "@/store/waiterStore";
 import { supabase } from "@/lib/supabase";
 import type { DbOrder, PaymentMethod } from "@/lib/waiterDb";
 
+// Tauri mobile builds call Vercel API routes over HTTPS via NEXT_PUBLIC_API_BASE
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
+
 const QUICK_TIPS = [0.5, 1, 2, 5];
 const POLL_INTERVAL_MS = 3000;
 const POLL_TIMEOUT_MS = 90000;
@@ -44,7 +47,7 @@ export default function PayPage() {
   // Load Viva terminals for this venue
   useEffect(() => {
     if (!venueId) return;
-    fetch(`/api/viva/terminals?venue_id=${venueId}`)
+    fetch(`${API_BASE}/api/viva/terminals?venue_id=${venueId}`)
       .then((r) => r.json())
       .then((data: { terminals: VivaTerminal[]; merchant_id: string | null }) => {
         setTerminals(data.terminals ?? []);
@@ -82,7 +85,7 @@ export default function PayPage() {
     const amountCents = Math.round(total * 100);
 
     setStatusMsg("Αποστολή στο τερματικό...");
-    const chargeRes = await fetch("/api/viva/charge", {
+    const chargeRes = await fetch(`${API_BASE}/api/viva/charge`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -110,7 +113,7 @@ export default function PayPage() {
           return;
         }
         try {
-          const r = await fetch(`/api/viva/status?session_id=${sessionId}&merchant_id=${merchantId}`);
+          const r = await fetch(`${API_BASE}/api/viva/status?session_id=${sessionId}&merchant_id=${merchantId}`);
           const s = await r.json() as { success?: boolean; transaction_id?: string; eventId?: number };
           if (s.success && s.transaction_id) {
             clearInterval(pollTimer.current!);

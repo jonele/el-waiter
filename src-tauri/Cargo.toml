@@ -1,0 +1,17 @@
+[package]
+name = "el-waiter"
+version = "1.0.0"
+edition = "2021"
+description = "EL Waiter — Table service app for EL Value venues"
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

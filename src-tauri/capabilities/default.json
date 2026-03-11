@@ -1,0 +1,8 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for EL Waiter",
+  "windows": ["main"],
+  "permissions": [
+    "core:default"
+  ]
+}

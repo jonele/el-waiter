@@ -106,10 +106,9 @@ export default function LoginPage() {
       display: "flex", flexDirection: "column", alignItems: "center",
       justifyContent: "center", padding: "24px", gap: 24,
     }}>
-      <div style={{ fontSize: 56 }}>🍽️</div>
+      <img src="/logo.png" alt="EL Waiter" style={{ height: 72, width: "auto", objectFit: "contain" }} />
       <div style={{ textAlign: "center" }}>
-        <p style={{ color: "#fff", fontSize: 22, fontWeight: 700, margin: 0 }}>EL Waiter</p>
-        <p style={{ color: "#6B7280", fontSize: 14, marginTop: 6 }}>Ρύθμιση Συσκευής</p>
+        <p style={{ color: "#6B7280", fontSize: 14, marginTop: 4 }}>Ρύθμιση Συσκευής</p>
       </div>
 
       <p style={{ color: "#9CA3AF", fontSize: 13, textAlign: "center", maxWidth: 280 }}>
@@ -172,9 +171,8 @@ export default function LoginPage() {
     }}>
       {/* Logo */}
       <div style={{ textAlign: "center" }}>
-        <div style={{ fontSize: 52 }}>🍽️</div>
-        <p style={{ color: "#fff", fontSize: 22, fontWeight: 700, margin: "6px 0 0" }}>EL Waiter</p>
-        <p style={{ color: "#6B7280", fontSize: 13, marginTop: 4 }}>Είσοδος Προσωπικού</p>
+        <img src="/logo.png" alt="EL Waiter" style={{ height: 64, width: "auto", objectFit: "contain", marginBottom: 6 }} />
+        <p style={{ color: "#6B7280", fontSize: 13, marginTop: 0 }}>Είσοδος Προσωπικού</p>
       </div>
 
       {/* Mode toggle */}

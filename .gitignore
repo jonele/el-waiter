@@ -5,3 +5,6 @@ out/
 .DS_Store
 *.tsbuildinfo
 .vercel
+
+# Tauri
+src-tauri/target/
