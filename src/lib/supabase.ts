@@ -67,6 +67,35 @@ export async function fetchProfilesForVenue(venueId: string): Promise<WaiterProf
   return data ?? [];
 }
 
+// ── Shift tracking ───────────────────────────────────────────────────────────
+
+export async function startShift(waiterId: string, venueId: string, waiterName: string): Promise<string | null> {
+  if (!supabase) return null;
+  const { data } = await supabase
+    .from("waiter_shifts")
+    .insert({ waiter_id: waiterId, venue_id: venueId, waiter_name: waiterName })
+    .select("id")
+    .single();
+  return data?.id ?? null;
+}
+
+export async function endShift(shiftId: string): Promise<void> {
+  if (!supabase || !shiftId) return;
+  const { data: shift } = await supabase
+    .from("waiter_shifts")
+    .select("login_at")
+    .eq("id", shiftId)
+    .single();
+  const logoutAt = new Date().toISOString();
+  const durationMinutes = shift?.login_at
+    ? Math.round((Date.now() - new Date(shift.login_at).getTime()) / 60000)
+    : null;
+  void supabase
+    .from("waiter_shifts")
+    .update({ logout_at: logoutAt, duration_minutes: durationMinutes })
+    .eq("id", shiftId);
+}
+
 export async function lookupWaiterByQrToken(venueId: string, qrToken: string): Promise<WaiterProfile | null> {
   if (!supabase) return null;
   const { data } = await supabase

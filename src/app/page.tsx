@@ -6,6 +6,7 @@ import {
   lookupWaiterByPin,
   lookupWaiterByQrToken,
   fetchProfilesForVenue,
+  startShift,
   WaiterProfile,
 } from "@/lib/supabase";
 import QRScanner from "@/components/QRScanner";
@@ -40,7 +41,7 @@ function isUUID(str: string): boolean {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { waiter, login, deviceVenueId, setDeviceVenueId } = useWaiterStore();
+  const { waiter, login, deviceVenueId, setDeviceVenueId, setCurrentShiftId } = useWaiterStore();
 
   const [profiles, setProfiles] = useState<WaiterProfile[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
@@ -96,6 +97,14 @@ export default function LoginPage() {
     setDeviceVenueId(val);
   }
 
+  // ── Shared: login + start shift ───────────────────────────────────
+  const doLogin = useCallback(async (profile: WaiterProfile) => {
+    login(profile as unknown as DbWaiterProfile);
+    const shiftId = await startShift(profile.id, profile.venue_id, profile.name);
+    if (shiftId) setCurrentShiftId(shiftId);
+    router.push("/tables");
+  }, [login, setCurrentShiftId, router]);
+
   // ── Login QR scan ─────────────────────────────────────────────────
   const handleLoginScan = useCallback(async (raw: string) => {
     if (!deviceVenueId) return;
@@ -105,13 +114,12 @@ export default function LoginPage() {
     const profile = await lookupWaiterByQrToken(deviceVenueId, token);
     setLoading(false);
     if (profile) {
-      login(profile as unknown as DbWaiterProfile);
-      router.push("/tables");
+      await doLogin(profile);
     } else {
       setError("Δεν βρέθηκε προφίλ για αυτό το QR.");
       setTimeout(() => setError(""), 2000);
     }
-  }, [deviceVenueId, login, router]);
+  }, [deviceVenueId, doLogin]);
 
   // ── PIN entry ─────────────────────────────────────────────────────
   async function handleNum(v: string) {
@@ -125,8 +133,7 @@ export default function LoginPage() {
       // Fast local check if pin is available in profile
       if (selectedProfile.pin) {
         if (selectedProfile.pin === next) {
-          login(selectedProfile as unknown as DbWaiterProfile);
-          router.push("/tables");
+          await doLogin(selectedProfile);
         } else {
           setError("Λάθος PIN. Δοκίμασε ξανά.");
           setTimeout(() => { setPin(""); setError(""); }, 1500);
@@ -140,8 +147,7 @@ export default function LoginPage() {
       const profile = await lookupWaiterByPin(deviceVenueId, next);
       setLoading(false);
       if (profile) {
-        login(profile as unknown as DbWaiterProfile);
-        router.push("/tables");
+        await doLogin(profile);
       } else {
         setError("Λάθος PIN. Δοκίμασε ξανά.");
         setTimeout(() => { setPin(""); setError(""); }, 1500);

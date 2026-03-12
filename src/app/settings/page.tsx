@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useWaiterStore } from "@/store/waiterStore";
-import { supabase } from "@/lib/supabase";
+import { supabase, endShift } from "@/lib/supabase";
 import { waiterDb } from "@/lib/waiterDb";
 import type { Theme } from "@/store/waiterStore";
 
@@ -14,7 +14,7 @@ const THEMES: { key: Theme; label: string; icon: string }[] = [
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { waiter, settings, updateSettings, isOnline, pendingSyncs, theme, setTheme, logout, deviceVenueId } = useWaiterStore();
+  const { waiter, settings, updateSettings, isOnline, pendingSyncs, theme, setTheme, logout, deviceVenueId, currentShiftId } = useWaiterStore();
   const [form, setForm] = useState(settings);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
@@ -74,7 +74,8 @@ export default function SettingsPage() {
     setSyncMsg("Δεδομένα διαγράφηκαν.");
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    if (currentShiftId) await endShift(currentShiftId);
     logout();
     router.replace("/");
   }

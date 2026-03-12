@@ -24,9 +24,11 @@ interface WaiterState {
   isOnline:        boolean;
   pendingSyncs:    number;
   deviceVenueId:   string | null;
+  currentShiftId:  string | null;
 
   login:             (w: DbWaiterProfile) => void;
   logout:            () => void;
+  setCurrentShiftId: (id: string | null) => void;
   setActiveTable:    (t: DbTable | null) => void;
   updateSettings:    (u: Partial<WaiterSettings>) => void;
   setTheme:          (t: Theme) => void;
@@ -45,9 +47,11 @@ export const useWaiterStore = create<WaiterState>()(
       isOnline:        true,
       pendingSyncs:    0,
       deviceVenueId:   null,
+      currentShiftId:  null,
 
       login:             (waiter)  => set({ waiter }),
-      logout:            ()        => set({ waiter: null, activeTable: null }),
+      logout:            ()        => set({ waiter: null, activeTable: null, currentShiftId: null }),
+      setCurrentShiftId: (id)      => set({ currentShiftId: id }),
       setActiveTable:    (t)       => set({ activeTable: t }),
       updateSettings:    (u)       => set((s) => ({ settings: { ...s.settings, ...u } })),
       setTheme:          (theme)   => set({ theme }),
@@ -58,7 +62,7 @@ export const useWaiterStore = create<WaiterState>()(
     {
       name:    "el-waiter",
       storage: createJSONStorage(() => localStorage),
-      partialize: (s) => ({ waiter: s.waiter, settings: s.settings, theme: s.theme, deviceVenueId: s.deviceVenueId }),
+      partialize: (s) => ({ waiter: s.waiter, settings: s.settings, theme: s.theme, deviceVenueId: s.deviceVenueId, currentShiftId: s.currentShiftId }),
     }
   )
 );
