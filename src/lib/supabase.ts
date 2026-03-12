@@ -56,6 +56,17 @@ export async function lookupWaiterByPin(venueId: string, pin: string): Promise<W
   return data ?? null;
 }
 
+export async function fetchProfilesForVenue(venueId: string): Promise<WaiterProfile[]> {
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("waiter_profiles")
+    .select("id, venue_id, name, icon, color, pin, role, qr_token, active, sort_order")
+    .eq("venue_id", venueId)
+    .eq("active", true)
+    .order("sort_order", { ascending: true });
+  return data ?? [];
+}
+
 export async function lookupWaiterByQrToken(venueId: string, qrToken: string): Promise<WaiterProfile | null> {
   if (!supabase) return null;
   const { data } = await supabase
