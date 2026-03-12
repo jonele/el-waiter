@@ -91,6 +91,37 @@ export default function TablesPage() {
     return () => { void supabase!.removeChannel(channel); };
   }, [waiter?.venue_id, waiter?.name]);
 
+  // Realtime: live pos_tables status updates + hostess bill notifications
+  useEffect(() => {
+    if (!supabase || !waiter?.venue_id) return;
+    const venueId = waiter.venue_id;
+    const isHostess = waiter.role?.toLowerCase() === "hostess";
+
+    const ch = supabase
+      .channel(`tables-live-${venueId}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "pos_tables", filter: `venue_id=eq.${venueId}` },
+        (payload) => {
+          const row = payload.new as { id: string; status: string; seated_customer_name?: string };
+          setTables((prev) => prev.map((t) =>
+            t.id === row.id ? { ...t, status: row.status as DbTable["status"], seated_customer_name: row.seated_customer_name ?? null } : t
+          ));
+        }
+      );
+
+    if (isHostess) {
+      ch.on("postgres_changes", { event: "INSERT", schema: "public", table: "bill_requests", filter: `venue_id=eq.${venueId}` },
+        (payload) => {
+          const row = payload.new as { table_name: string; waiter_name?: string };
+          setIncomingMsg({ from: "🧾 Λογαριασμός", body: `Τραπέζι ${row.table_name}${row.waiter_name ? ` (${row.waiter_name})` : ""}` });
+          setTimeout(() => setIncomingMsg(null), 5000);
+        }
+      );
+    }
+
+    ch.subscribe();
+    return () => { void supabase!.removeChannel(ch); };
+  }, [waiter?.venue_id, waiter?.role]);
+
   async function loadLocal() {
     const [secs, tbls, orders] = await Promise.all([
       waiterDb.floorSections.where("venue_id").equals(waiter!.venue_id).sortBy("sort_order"),
