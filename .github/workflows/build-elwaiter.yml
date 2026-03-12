@@ -94,6 +94,10 @@ jobs:
           echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode \
             -o ~/Library/MobileDevice/Provisioning\ Profiles/elwaiter.mobileprovision
 
+      # Tauri build phase script reads this addr file — create stub so it doesn't fail
+      - name: Create server addr stub for Release build
+        run: echo -n "https://el-waiter.vercel.app" > $TMPDIR/com.elvalue.elwaiter-server-addr
+
       # ── Build (xcodebuild directly — tauri ios build doesn't relay manual signing) ──
       - name: Build iOS archive
         env:
