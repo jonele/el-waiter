@@ -61,6 +61,7 @@ jobs:
             const fs = require('fs');
             const cfg = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
             cfg.build.frontendDist = 'https://el-waiter.vercel.app';
+            cfg.build.beforeBuildCommand = '';
             cfg.bundle.iOS.developmentTeam = process.env.APPLE_TEAM_ID;
             fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(cfg, null, 2));
             console.log('iOS config patched — team:', process.env.APPLE_TEAM_ID);
@@ -192,6 +193,7 @@ jobs:
             const fs = require('fs');
             const cfg = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
             cfg.build.frontendDist = 'https://el-waiter.vercel.app';
+            cfg.build.beforeBuildCommand = '';
             fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(cfg, null, 2));
             console.log('Android config patched — frontendDist set to Vercel URL');
           "
