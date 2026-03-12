@@ -78,7 +78,12 @@ jobs:
       # Xcode then links the pre-built .a via xcconfig LIBRARY_SEARCH_PATHS.
       # --cfg mobile is required for tauri::mobile_entry_point macro to expand.
       # The xcode-script normally sets this; since we bypassed it, set explicitly.
+      # IPHONEOS_DEPLOYMENT_TARGET=17.0 prevents Swift compiler from emitting
+      # FORCE_LOAD symbols for swiftCompatibility51/56/Concurrency — those compat
+      # libs were removed from Xcode 16's toolchain (iOS 16+ minimum).
       - name: Pre-compile Rust for iOS
+        env:
+          IPHONEOS_DEPLOYMENT_TARGET: "17.0"
         run: RUSTFLAGS="--cfg mobile" cargo build --target aarch64-apple-ios --release --lib
         working-directory: src-tauri
 
@@ -155,6 +160,7 @@ jobs:
             DEVELOPMENT_TEAM=$APPLE_TEAM_ID \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             PROVISIONING_PROFILE_SPECIFIER="EL Waiter Distribution" \
+            IPHONEOS_DEPLOYMENT_TARGET=17.0 \
             "LIBRARY_SEARCH_PATHS=$(inherited) $GITHUB_WORKSPACE/src-tauri/target/aarch64-apple-ios/release"
 
       - name: Export IPA
