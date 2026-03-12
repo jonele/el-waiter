@@ -70,6 +70,11 @@ jobs:
       - name: Initialize Tauri iOS project
         run: npx tauri ios init
 
+      # xcode-script reads this file even in release mode (panics if missing).
+      # Content = frontendDist URL. App loads from Vercel, not a dev WebSocket.
+      - name: Create server addr stub for CI
+        run: echo -n "https://el-waiter.vercel.app" > $TMPDIR/com.elvalue.elwaiter-server-addr
+
       # ── Code signing ──────────────────────────────────────────────────────
       - name: Import distribution certificate
         env:
