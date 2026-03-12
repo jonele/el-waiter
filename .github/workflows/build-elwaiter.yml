@@ -180,6 +180,11 @@ jobs:
             <false/>
             <key>compileBitcode</key>
             <false/>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>com.elvalue.elwaiter</key>
+              <string>EL Waiter Distribution</string>
+            </dict>
           </dict>
           </plist>
           EOF
