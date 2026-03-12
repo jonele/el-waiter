@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <!-- Serving tray arc -->
+  <path d="M30 110 Q100 55 170 110" stroke="currentColor" stroke-width="10" stroke-linecap="round" fill="none"/>
+  <!-- Tray base -->
+  <rect x="22" y="112" width="156" height="14" rx="7" fill="currentColor"/>
+  <!-- Dome / cloche -->
+  <path d="M60 110 Q100 62 140 110" stroke="currentColor" stroke-width="7" stroke-linecap="round" fill="none"/>
+  <!-- Stand / handle stem -->
+  <rect x="92" y="126" width="16" height="28" rx="8" fill="currentColor"/>
+  <!-- Base foot -->
+  <rect x="68" y="150" width="64" height="14" rx="7" fill="currentColor"/>
+</svg>

@@ -8,6 +8,18 @@ import type { DbWaiterProfile } from "@/lib/waiterDb";
 
 const NUM_PAD = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
 
+function WaiterLogo({ size = 64 }: { size?: number }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 200 200" fill="none" style={{ color: "#3B82F6" }}>
+      <path d="M30 110 Q100 55 170 110" stroke="currentColor" strokeWidth="10" strokeLinecap="round"/>
+      <rect x="22" y="112" width="156" height="14" rx="7" fill="currentColor"/>
+      <path d="M60 110 Q100 62 140 110" stroke="currentColor" strokeWidth="7" strokeLinecap="round"/>
+      <rect x="92" y="126" width="16" height="28" rx="8" fill="currentColor"/>
+      <rect x="68" y="150" width="64" height="14" rx="7" fill="currentColor"/>
+    </svg>
+  );
+}
+
 function parseQrToken(raw: string): string {
   try {
     const url = new URL(raw);
@@ -112,7 +124,10 @@ export default function LoginPage() {
       }} />
 
       <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 24, width: "100%" }}>
-        <img src="/logo.png" alt="EL Waiter" style={{ height: 72, width: "auto", objectFit: "contain" }} />
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+          <WaiterLogo size={72} />
+          <span style={{ color: "var(--c-text)", fontSize: 18, fontWeight: 700, letterSpacing: 0.5 }}>EL Waiter</span>
+        </div>
         <p style={{ color: "var(--c-text2)", fontSize: 14, marginTop: -16 }}>Ρύθμιση Συσκευής</p>
 
         <p style={{ color: "var(--c-text2)", fontSize: 13, textAlign: "center", maxWidth: 280 }}>
@@ -183,8 +198,9 @@ export default function LoginPage() {
       <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 20, width: "100%", maxWidth: 360 }}>
         {/* Logo */}
         <div style={{ textAlign: "center" }}>
-          <img src="/logo.png" alt="EL Waiter" style={{ height: 64, width: "auto", objectFit: "contain", marginBottom: 6 }} />
-          <p style={{ color: "var(--c-text2)", fontSize: 13 }}>Είσοδος Προσωπικού</p>
+          <WaiterLogo size={64} />
+          <span style={{ color: "var(--c-text)", fontSize: 20, fontWeight: 700, letterSpacing: 0.5 }}>EL Waiter</span>
+          <p style={{ color: "var(--c-text2)", fontSize: 13, marginTop: 2 }}>Είσοδος Προσωπικού</p>
         </div>
 
         {/* Mode toggle */}
