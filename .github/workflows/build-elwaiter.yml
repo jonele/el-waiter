@@ -70,10 +70,39 @@ jobs:
       - name: Initialize Tauri iOS project
         run: npx tauri ios init
 
-      # xcode-script reads this file even in release mode (panics if missing).
-      # Content = frontendDist URL. App loads from Vercel, not a dev WebSocket.
-      - name: Create server addr stub for CI
-        run: echo -n "https://el-waiter.vercel.app" > $TMPDIR/com.elvalue.elwaiter-server-addr
+      # ── Pre-compile Rust + bypass Tauri IPC ───────────────────────────────
+      # The "Build Rust Code" xcode-script phase requires a running IPC server
+      # (spawned by `tauri ios dev/build`). We bypass it by:
+      #   1. Pre-compiling the Rust lib directly with cargo
+      #   2. Replacing the xcode-script phase in project.pbxproj with `exit 0`
+      # Xcode then links the pre-built .a via xcconfig LIBRARY_SEARCH_PATHS.
+      - name: Pre-compile Rust for iOS
+        run: cargo build --target aarch64-apple-ios --release --lib
+        working-directory: src-tauri
+
+      - name: Patch Xcode project — replace tauri xcode-script with no-op
+        run: |
+          python3 << 'EOF'
+          pbxproj = 'src-tauri/gen/apple/el-waiter.xcodeproj/project.pbxproj'
+          with open(pbxproj, 'r') as f:
+              content = f.read()
+          marker = 'shellScript = "npm run -- tauri ios xcode-script'
+          idx = content.find(marker)
+          if idx >= 0:
+              end_idx = content.find('";\n', idx)
+              if end_idx >= 0:
+                  old = content[idx : end_idx + 3]
+                  content = content[:idx] + 'shellScript = "exit 0";' + '\n' + content[end_idx + 3:]
+                  print('Patched: Build Rust Code phase → exit 0')
+              else:
+                  print('ERROR: Could not find end of shellScript')
+                  exit(1)
+          else:
+              print('ERROR: Could not find tauri ios xcode-script in pbxproj')
+              exit(1)
+          with open(pbxproj, 'w') as f:
+              f.write(content)
+          EOF
 
       # ── Code signing ──────────────────────────────────────────────────────
       - name: Import distribution certificate
@@ -99,9 +128,9 @@ jobs:
           echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode \
             -o ~/Library/MobileDevice/Provisioning\ Profiles/elwaiter.mobileprovision
 
-      # ── Build (xcodebuild directly — tauri ios build doesn't relay manual signing) ──
-      # Tauri generates Xcode projects with lowercase config names ("release" not "Release").
-      # Passing -configuration release causes the xcode-script to skip the dev-server addr file.
+      # ── Build ─────────────────────────────────────────────────────────────
+      # Rust is pre-compiled above. LIBRARY_SEARCH_PATHS added explicitly in
+      # case xcconfig doesn't have it (belt-and-suspenders for CI).
       - name: Build iOS archive
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -116,7 +145,8 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM=$APPLE_TEAM_ID \
             CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE_SPECIFIER="EL Waiter Distribution"
+            PROVISIONING_PROFILE_SPECIFIER="EL Waiter Distribution" \
+            "LIBRARY_SEARCH_PATHS=$(inherited) $GITHUB_WORKSPACE/src-tauri/target/aarch64-apple-ios/release"
 
       - name: Export IPA
         env:
