@@ -1,11 +1,13 @@
 import type { NextConfig } from "next";
 
-const isTauri = process.env.NEXT_PUBLIC_TAURI === "1";
+const isStatic =
+  process.env.NEXT_PUBLIC_TAURI === "1" ||
+  process.env.NEXT_PUBLIC_CAP === "1";
 
 const nextConfig: NextConfig = {
   images: { unoptimized: true },
-  // Static export for Tauri mobile builds — Vercel deployment uses SSR normally
-  ...(isTauri ? { output: "export", distDir: "out" } : {}),
+  // Static export for Tauri + Capacitor builds — Vercel uses SSR normally
+  ...(isStatic ? { output: "export", distDir: "out" } : {}),
 };
 
 export default nextConfig;

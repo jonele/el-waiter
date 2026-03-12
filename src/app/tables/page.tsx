@@ -5,6 +5,7 @@ import { waiterDb } from "@/lib/waiterDb";
 import { useWaiterStore } from "@/store/waiterStore";
 import { supabase } from "@/lib/supabase";
 import BottomNav from "@/components/BottomNav";
+import { registerPushNotifications } from "@/lib/pushNotifications";
 import type { DbTable, DbFloorSection, DbOrder } from "@/lib/waiterDb";
 import type { Theme } from "@/store/waiterStore";
 import type { BillRequest } from "@/lib/supabase";
@@ -54,6 +55,8 @@ export default function TablesPage() {
       syncFromSupabase();
       fetchKitchenOrders();
     }
+    // Register native push notifications (no-op on web)
+    void registerPushNotifications(waiter.id, waiter.venue_id);
   }, [waiter, waiter!.venue_id]);
 
   // Cleanup bill subscription on unmount

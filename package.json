@@ -7,9 +7,18 @@
     "build": "next build",
     "build:tauri": "NEXT_PUBLIC_TAURI=1 next build",
     "start": "next start",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build:cap": "NEXT_PUBLIC_CAP=1 next build",
+    "cap:sync": "npm run build:cap && npx cap sync",
+    "cap:ios": "npm run build:cap && npx cap sync ios && npx cap open ios"
   },
   "dependencies": {
+    "@capacitor/android": "^8.2.0",
+    "@capacitor/core": "^8.2.0",
+    "@capacitor/ios": "^8.2.0",
+    "@capacitor/push-notifications": "^8.0.2",
+    "@capacitor/splash-screen": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.1",
     "@supabase/supabase-js": "^2.95.3",
     "@tauri-apps/api": "^2.10.1",
     "@types/uuid": "^10.0.0",
@@ -22,6 +31,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.2.0",
     "@tauri-apps/cli": "^2",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
