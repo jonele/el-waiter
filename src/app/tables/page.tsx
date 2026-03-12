@@ -371,7 +371,7 @@ export default function TablesPage() {
                 key={t.id}
                 onClick={() => openTable(t)}
                 className="relative flex flex-col items-center justify-center gap-1 rounded-3xl border-2 min-h-[96px] px-2 py-4 transition-transform active:scale-90 duration-100"
-                style={{ background: st.bg, borderColor: st.border }}
+                style={{ background: st.bg, borderColor: st.border, boxShadow: "var(--c-card-shadow)" }}
               >
                 {/* Status dot — hide on occupied when bill button shown */}
                 {!isOccupied && (

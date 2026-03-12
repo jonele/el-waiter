@@ -14,7 +14,7 @@ export default function BottomNav() {
   return (
     <nav
       className="fixed bottom-0 left-0 right-0 z-40 backdrop-blur-md border-t flex pb-safe"
-      style={{ background: "var(--c-header)", borderColor: "var(--c-border)" }}
+      style={{ background: "var(--c-header)", borderColor: "var(--c-border)", boxShadow: "var(--c-nav-shadow)" }}
     >
       {TABS.map(({ href, label, icon: Icon }) => {
         const active = pathname.startsWith(href);
