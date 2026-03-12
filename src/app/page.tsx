@@ -54,13 +54,24 @@ export default function LoginPage() {
   // ── Device Setup QR scan ──────────────────────────────────────────
   const handleDeviceSetupScan = useCallback((raw: string) => {
     const val = raw.trim();
+    // Accept raw UUID
     if (isUUID(val)) {
       setDeviceVenueId(val);
       setSetupScanning(false);
-    } else {
-      setSetupError("Μη έγκυρο QR. Σκανάρε το QR ρύθμισης από το EL-Loyal.");
-      setTimeout(() => { setSetupError(""); setSetupScanning(false); setSetupScanning(true); }, 2000);
+      return;
     }
+    // Accept URL format: https://el-waiter.vercel.app/setup/{venueId}?t=...
+    try {
+      const url = new URL(val);
+      const pathUUID = url.pathname.split("/").find(p => isUUID(p));
+      if (pathUUID) {
+        setDeviceVenueId(pathUUID);
+        setSetupScanning(false);
+        return;
+      }
+    } catch { /* not a URL */ }
+    setSetupError("Μη έγκυρο QR. Σκανάρε το QR ρύθμισης από το EL-Loyal.");
+    setTimeout(() => { setSetupError(""); setSetupScanning(false); setSetupScanning(true); }, 2000);
   }, [setDeviceVenueId]);
 
   function handleSetupManual() {
