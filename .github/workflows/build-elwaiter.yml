@@ -76,8 +76,10 @@ jobs:
       #   1. Pre-compiling the Rust lib directly with cargo
       #   2. Replacing the xcode-script phase in project.pbxproj with `exit 0`
       # Xcode then links the pre-built .a via xcconfig LIBRARY_SEARCH_PATHS.
+      # --cfg mobile is required for tauri::mobile_entry_point macro to expand.
+      # The xcode-script normally sets this; since we bypassed it, set explicitly.
       - name: Pre-compile Rust for iOS
-        run: cargo build --target aarch64-apple-ios --release --lib
+        run: RUSTFLAGS="--cfg mobile" cargo build --target aarch64-apple-ios --release --lib
         working-directory: src-tauri
 
       # Tauri iOS xcconfig uses -lapp (hardcoded). Our lib is libel_waiter_lib.a.
