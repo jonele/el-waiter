@@ -94,18 +94,47 @@ jobs:
           echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode \
             -o ~/Library/MobileDevice/Provisioning\ Profiles/elwaiter.mobileprovision
 
-      # ── Build ─────────────────────────────────────────────────────────────
-      - name: Build iOS IPA
+      # ── Build (xcodebuild directly — tauri ios build doesn't relay manual signing) ──
+      - name: Build iOS archive
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
-          npx tauri ios build \
-            --export-method app-store-connect \
-            -- \
+          cd src-tauri/gen/apple
+          xcodebuild archive \
+            -project el-waiter.xcodeproj \
+            -scheme el-waiter_iOS \
+            -configuration Release \
+            -archivePath $RUNNER_TEMP/ELWaiter.xcarchive \
+            -destination "generic/platform=iOS" \
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM=$APPLE_TEAM_ID \
             CODE_SIGN_IDENTITY="Apple Distribution" \
             PROVISIONING_PROFILE_SPECIFIER="EL Waiter Distribution"
+
+      - name: Export IPA
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          cat > $RUNNER_TEMP/ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>teamID</key>
+            <string>$APPLE_TEAM_ID</string>
+            <key>uploadBitcode</key>
+            <false/>
+            <key>compileBitcode</key>
+            <false/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+            -archivePath $RUNNER_TEMP/ELWaiter.xcarchive \
+            -exportPath $RUNNER_TEMP/export \
+            -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist
 
       # ── Upload to TestFlight ──────────────────────────────────────────────
       - name: Upload to TestFlight
@@ -114,15 +143,11 @@ jobs:
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
         run: |
-          # Write the .p8 key file
           mkdir -p ~/.appstoreconnect/private_keys
           echo -n "$APP_STORE_CONNECT_PRIVATE_KEY" \
             > ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_KEY_ID.p8
-
-          # Find the IPA
-          IPA=$(find src-tauri/gen/apple/build -name "*.ipa" | head -1)
+          IPA=$(find $RUNNER_TEMP/export -name "*.ipa" | head -1)
           echo "Uploading: $IPA"
-
           xcrun altool --upload-app \
             --type ios \
             --file "$IPA" \
@@ -134,7 +159,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: EL-Waiter-iOS-v${{ steps.version.outputs.VERSION }}.ipa
-          path: src-tauri/gen/apple/build/**/*.ipa
+          path: ${{ runner.temp }}/export/*.ipa
           if-no-files-found: warn
 
 # ─── Android ─────────────────────────────────────────────────────────────────
