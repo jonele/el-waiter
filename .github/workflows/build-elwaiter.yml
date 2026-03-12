@@ -94,11 +94,9 @@ jobs:
           echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode \
             -o ~/Library/MobileDevice/Provisioning\ Profiles/elwaiter.mobileprovision
 
-      # Tauri build phase script reads this addr file — create stub so it doesn't fail
-      - name: Create server addr stub for Release build
-        run: echo -n "https://el-waiter.vercel.app" > $TMPDIR/com.elvalue.elwaiter-server-addr
-
       # ── Build (xcodebuild directly — tauri ios build doesn't relay manual signing) ──
+      # TAURI_ENV_* vars tell the xcode-script build phase this is a Release build
+      # so it skips the WebSocket dev-server connection
       - name: Build iOS archive
         env:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
@@ -113,7 +111,12 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM=$APPLE_TEAM_ID \
             CODE_SIGN_IDENTITY="Apple Distribution" \
-            PROVISIONING_PROFILE_SPECIFIER="EL Waiter Distribution"
+            PROVISIONING_PROFILE_SPECIFIER="EL Waiter Distribution" \
+            TAURI_ENV_TARGET_TRIPLE=aarch64-apple-ios \
+            TAURI_ENV_FEATURES="" \
+            TAURI_ENV_PROFILE=release \
+            TAURI_ENV_PLATFORM_VERSION=14.0 \
+            TAURI_ENV_DEBUG=false
 
       - name: Export IPA
         env:
