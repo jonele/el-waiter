@@ -80,6 +80,13 @@ jobs:
         run: cargo build --target aarch64-apple-ios --release --lib
         working-directory: src-tauri
 
+      # Tauri iOS xcconfig uses -lapp (hardcoded). Our lib is libel_waiter_lib.a.
+      # Create a symlink so the linker finds it.
+      - name: Symlink libapp.a for Tauri iOS xcconfig
+        run: |
+          cd src-tauri/target/aarch64-apple-ios/release
+          ln -sf libel_waiter_lib.a libapp.a
+
       - name: Patch Xcode project — replace tauri xcode-script with no-op
         run: |
           python3 << 'EOF'
