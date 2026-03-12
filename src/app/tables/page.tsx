@@ -41,6 +41,12 @@ export default function TablesPage() {
   // Kitchen orders state: map of table_name -> latest status
   const [kitchenStatus, setKitchenStatus] = useState<Record<string, "pending" | "in_progress" | "done">>({});
 
+  // Staff messaging state
+  const [showMessageSheet, setShowMessageSheet] = useState(false);
+  const [msgTarget, setMsgTarget] = useState("boss");
+  const [msgBody, setMsgBody] = useState("");
+  const [incomingMsg, setIncomingMsg] = useState<{ from: string; body: string } | null>(null);
+
   useEffect(() => {
     if (!waiter) { router.replace("/"); return; }
     loadLocal();
@@ -56,6 +62,31 @@ export default function TablesPage() {
       if (supabase) void supabase.removeAllChannels();
     };
   }, []);
+
+  // Staff @mention realtime subscription for incoming messages
+  useEffect(() => {
+    if (!supabase || !waiter?.venue_id) return;
+    const venueId = waiter.venue_id;
+    const waiterName = (waiter.name ?? "").toLowerCase();
+    const channel = supabase
+      .channel(`staff-msgs-waiter-${venueId}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "pos_staff_messages", filter: `venue_id=eq.${venueId}` },
+        (payload) => {
+          const msg = payload.new as { from_name: string; to_target: string; body: string };
+          const isForUs =
+            msg.to_target === "all" ||
+            msg.to_target.toLowerCase() === waiterName;
+          if (isForUs) {
+            setIncomingMsg({ from: msg.from_name, body: msg.body });
+            setTimeout(() => setIncomingMsg(null), 4000);
+          }
+        }
+      )
+      .subscribe();
+    return () => { void supabase!.removeChannel(channel); };
+  }, [waiter?.venue_id, waiter?.name]);
 
   async function loadLocal() {
     const [secs, tbls, orders] = await Promise.all([
@@ -281,6 +312,15 @@ export default function TablesPage() {
         </div>
 
         <div className="flex items-center -mr-2">
+          {/* Message button */}
+          <button
+            onClick={() => setShowMessageSheet(true)}
+            className="flex items-center justify-center w-[60px] h-[60px] text-xl transition-transform active:scale-90"
+            aria-label="Μήνυμα προσωπικού"
+            style={{ color: "var(--c-text2)" }}
+          >
+            {"\uD83D\uDCAC"}
+          </button>
           {/* Theme toggle */}
           <button
             onClick={cycleTheme}
@@ -567,6 +607,84 @@ export default function TablesPage() {
       )}
 
       <BottomNav />
+
+      {/* Staff message bottom sheet */}
+      {showMessageSheet && (
+        <div
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.6)", zIndex: 100 }}
+          onClick={() => setShowMessageSheet(false)}
+        >
+          <div
+            style={{ position: "absolute", bottom: 0, left: 0, right: 0, background: "var(--c-surface)", borderRadius: "20px 20px 0 0", padding: 24 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <p style={{ fontWeight: 700, marginBottom: 16, color: "var(--c-text)", fontSize: 16 }}>
+              {"\uD83D\uDCAC \u039C\u03AE\u03BD\u03C5\u03BC\u03B1 \u03C3\u03C4\u03BF \u03C0\u03C1\u03BF\u03C3\u03C9\u03C0\u03B9\u03BA\u03CC"}
+            </p>
+            {/* Target chips */}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+              {["boss", "all"].map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setMsgTarget(t)}
+                  style={{
+                    padding: "8px 14px", borderRadius: 20, border: "none",
+                    background: msgTarget === t ? "#3b82f6" : "var(--c-surface2)",
+                    color: msgTarget === t ? "#fff" : "var(--c-text2)",
+                    fontWeight: 600, fontSize: 13, cursor: "pointer",
+                  }}
+                >
+                  @{t}
+                </button>
+              ))}
+            </div>
+            <textarea
+              value={msgBody}
+              onChange={(e) => setMsgBody(e.target.value)}
+              placeholder={"\u0393\u03C1\u03AC\u03C8\u03B5 \u03BC\u03AE\u03BD\u03C5\u03BC\u03B1..."}
+              style={{
+                width: "100%", background: "var(--c-surface2)", border: "none",
+                borderRadius: 10, padding: 12, color: "var(--c-text)", fontSize: 14,
+                minHeight: 80, resize: "none", boxSizing: "border-box",
+              }}
+            />
+            <button
+              onClick={async () => {
+                if (!msgBody.trim() || !supabase) return;
+                void supabase.from("pos_staff_messages").insert({
+                  venue_id: waiter?.venue_id ?? "",
+                  from_name: waiter?.name ?? "Waiter",
+                  from_device_type: "waiter",
+                  to_target: msgTarget,
+                  body: msgBody.trim(),
+                });
+                setMsgBody("");
+                setShowMessageSheet(false);
+              }}
+              style={{
+                width: "100%", marginTop: 12, padding: "14px 0",
+                background: "#3b82f6", color: "#fff", borderRadius: 12,
+                border: "none", fontWeight: 700, fontSize: 15, cursor: "pointer",
+              }}
+            >
+              {"\u0391\u03C0\u03BF\u03C3\u03C4\u03BF\u03BB\u03AE \u2192"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Incoming staff message toast */}
+      {incomingMsg && (
+        <div style={{
+          position: "fixed", bottom: 80, left: "50%", transform: "translateX(-50%)",
+          background: "#f59e0b", color: "#000", padding: "10px 20px",
+          borderRadius: 12, fontWeight: 700, fontSize: 14, zIndex: 9999,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+          whiteSpace: "nowrap",
+        }}>
+          {"\uD83D\uDCAC"} {incomingMsg.from}: {incomingMsg.body}
+        </div>
+      )}
     </div>
   );
 }
