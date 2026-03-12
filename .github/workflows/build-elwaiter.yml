@@ -52,13 +52,17 @@ jobs:
           fi
           echo "VERSION=$VER" >> $GITHUB_OUTPUT
 
-      - name: Build Next.js static export
-        env:
-          NEXT_PUBLIC_TAURI: "1"
-          NEXT_PUBLIC_API_BASE: "https://el-waiter.vercel.app"
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-        run: npm run build:tauri
+      # Load from Vercel instead of bundling static assets
+      # (Next.js static export can't handle edge-runtime API routes)
+      - name: Point Tauri iOS to Vercel remote frontend
+        run: |
+          node -e "
+            const fs = require('fs');
+            const cfg = JSON.parse(fs.readFileSync('src-tauri/tauri.conf.json', 'utf8'));
+            cfg.build.frontendDist = 'https://el-waiter.vercel.app';
+            fs.writeFileSync('src-tauri/tauri.conf.json', JSON.stringify(cfg, null, 2));
+            console.log('frontendDist set to https://el-waiter.vercel.app');
+          "
 
       - name: Initialize Tauri iOS project
         run: npx tauri ios init
