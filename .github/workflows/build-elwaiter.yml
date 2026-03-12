@@ -14,7 +14,7 @@ on:
 permissions:
   contents: write
 
-# ─── iOS ────────────────────────────────────────────────────────────────────
+# ─── iOS / iPadOS ────────────────────────────────────────────────────────────
 jobs:
   build-ios:
     runs-on: macos-latest
@@ -41,14 +41,6 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build Next.js static export
-        env:
-          NEXT_PUBLIC_TAURI: "1"
-          NEXT_PUBLIC_API_BASE: "https://el-waiter.vercel.app"
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-        run: npm run build:tauri
-
       - name: Extract version
         id: version
         run: |
@@ -60,24 +52,85 @@ jobs:
           fi
           echo "VERSION=$VER" >> $GITHUB_OUTPUT
 
+      - name: Build Next.js static export
+        env:
+          NEXT_PUBLIC_TAURI: "1"
+          NEXT_PUBLIC_API_BASE: "https://el-waiter.vercel.app"
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: npm run build:tauri
+
       - name: Initialize Tauri iOS project
         run: npx tauri ios init
 
-      # NOTE: For App Store / TestFlight submission, add Apple code signing secrets:
-      # APPLE_CERTIFICATE (base64 p12), APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
-      # APPLE_TEAM_ID, APPLE_PROVISIONING_PROFILE (base64)
-      - name: Build iOS (unsigned — add signing secrets for TestFlight)
-        run: npx tauri ios build --export-method development-void
-        continue-on-error: true
+      # ── Code signing ──────────────────────────────────────────────────────
+      - name: Import distribution certificate
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.APPLE_DISTRIBUTION_CERTIFICATE }}
+          CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          echo -n "$CERTIFICATE_BASE64" | base64 --decode -o $RUNNER_TEMP/cert.p12
+          security import $RUNNER_TEMP/cert.p12 -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
 
-      - name: Upload iOS artifact
+      - name: Install provisioning profile
+        env:
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.APPLE_PROVISIONING_PROFILE }}
+        run: |
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo -n "$PROVISIONING_PROFILE_BASE64" | base64 --decode \
+            -o ~/Library/MobileDevice/Provisioning\ Profiles/elwaiter.mobileprovision
+
+      # ── Build ─────────────────────────────────────────────────────────────
+      - name: Build iOS IPA
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          npx tauri ios build \
+            --export-method app-store-connect \
+            -- \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM=$APPLE_TEAM_ID \
+            CODE_SIGN_IDENTITY="Apple Distribution" \
+            PROVISIONING_PROFILE_SPECIFIER="EL Waiter Distribution"
+
+      # ── Upload to TestFlight ──────────────────────────────────────────────
+      - name: Upload to TestFlight
+        env:
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_PRIVATE_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+        run: |
+          # Write the .p8 key file
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo -n "$APP_STORE_CONNECT_PRIVATE_KEY" \
+            > ~/.appstoreconnect/private_keys/AuthKey_$APP_STORE_CONNECT_KEY_ID.p8
+
+          # Find the IPA
+          IPA=$(find src-tauri/gen/apple/build -name "*.ipa" | head -1)
+          echo "Uploading: $IPA"
+
+          xcrun altool --upload-app \
+            --type ios \
+            --file "$IPA" \
+            --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+            --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+
+      - name: Upload IPA artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: el-waiter-ios-${{ steps.version.outputs.VERSION }}
-          path: src-tauri/gen/apple/build/arm64/**/*.ipa
+          name: EL-Waiter-iOS-v${{ steps.version.outputs.VERSION }}.ipa
+          path: src-tauri/gen/apple/build/**/*.ipa
           if-no-files-found: warn
 
-# ─── Android ────────────────────────────────────────────────────────────────
+# ─── Android ─────────────────────────────────────────────────────────────────
   build-android:
     runs-on: ubuntu-latest
 
@@ -115,14 +168,6 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build Next.js static export
-        env:
-          NEXT_PUBLIC_TAURI: "1"
-          NEXT_PUBLIC_API_BASE: "https://el-waiter.vercel.app"
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-        run: npm run build:tauri
-
       - name: Extract version
         id: version
         run: |
@@ -134,12 +179,20 @@ jobs:
           fi
           echo "VERSION=$VER" >> $GITHUB_OUTPUT
 
+      - name: Build Next.js static export
+        env:
+          NEXT_PUBLIC_TAURI: "1"
+          NEXT_PUBLIC_API_BASE: "https://el-waiter.vercel.app"
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: npm run build:tauri
+
       - name: Initialize Tauri Android project
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
         run: npx tauri android init
 
-      - name: Build Android APK (debug — add keystore secrets for release)
+      - name: Build Android APK
         env:
           NDK_HOME: ${{ env.ANDROID_HOME }}/ndk/27.0.12077973
         run: npx tauri android build --debug
@@ -157,6 +210,6 @@ jobs:
       - name: Upload Android artifact
         uses: actions/upload-artifact@v4
         with:
-          name: el-waiter-android-${{ steps.version.outputs.VERSION }}
+          name: EL-Waiter-Android-v${{ steps.version.outputs.VERSION }}
           path: "*.apk"
           if-no-files-found: warn
