@@ -14,7 +14,7 @@ const THEMES: { key: Theme; label: string; icon: string }[] = [
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { waiter, settings, updateSettings, isOnline, pendingSyncs, theme, setTheme, logout, deviceVenueId, currentShiftId } = useWaiterStore();
+  const { waiter, settings, updateSettings, isOnline, pendingSyncs, failedSyncs, lastSyncedAt, theme, setTheme, logout, deviceVenueId, currentShiftId } = useWaiterStore();
   const [form, setForm] = useState(settings);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
@@ -185,6 +185,14 @@ export default function SettingsPage() {
           </div>
           {pendingSyncs > 0 && (
             <p className="text-amber-400 text-sm">{pendingSyncs} εκκρεμείς παραγγελίες</p>
+          )}
+          {failedSyncs > 0 && (
+            <p className="text-red-400 text-sm">{failedSyncs} αποτυχημένες (dead queue)</p>
+          )}
+          {lastSyncedAt && (
+            <p className="text-xs" style={{ color: "var(--c-text2)" }}>
+              Τελ. συγχρονισμός: {new Date(lastSyncedAt).toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+            </p>
           )}
           {syncMsg && (
             <p className={`text-sm ${syncMsg.startsWith("Σφάλμα") ? "text-red-400" : "text-green-400"}`}>{syncMsg}</p>

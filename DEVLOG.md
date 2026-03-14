@@ -76,3 +76,26 @@
 - **Platform guard**: all FCM code is no-op on web (Capacitor.isNativePlatform() check)
 - **Remaining manual steps**: Add `google-services.json` (Android) and `GoogleService-Info.plist` (iOS) from Firebase Console
 - **Next**: Phase 3 server-side push sender (when bill_request INSERT, query waiter_devices, send FCM via Firebase Admin SDK)
+
+## 2026-03-14 — Phase 3: Sync Hardening
+- **Goal**: Make the sync queue robust — backoff, dead letter queue, conflict resolution
+- **New file**: `src/lib/syncEngine.ts`
+  - `drainSyncQueue(db, supabase)` — batch drain (up to 10 items/cycle) with per-item error handling
+  - `getRetryDelay(retries)` — exponential backoff: 15s / 30s / 60s / 120s / 300s max
+  - `moveToDead(db, item, error)` — after 10 failed retries, moves item to `failedQueue`
+  - `resetBackoff()` / `bumpBackoff()` / `getCurrentBackoffMs()` — in-memory backoff state
+  - **Conflict resolution**:
+    - Table status updates: server wins (compares `updated_at`)
+    - Open orders: client wins (waiter's device is source of truth for unsynced orders)
+    - Paid/cancelled orders: server wins (fiscal receipt is authoritative)
+- **Updated**: `ConnectivityMonitor.tsx`
+  - 15s fixed polling for queue count (unchanged)
+  - Drain cycle uses exponential backoff timer (separate from count poll)
+  - On `online` event: resets backoff, triggers immediate drain
+  - Tracks `lastSyncedAt`, `failedSyncs` in store
+  - Guard against concurrent drains via `isDrainingRef`
+- **New DB table**: `failed_queue` (dead letter queue) in both SQLite + Dexie (v3 schema)
+- **New type**: `DbFailedSyncItem` in `dbTypes.ts`
+- **Store additions**: `failedSyncs`, `lastSyncedAt`, `setFailedSyncs()`, `setLastSyncedAt()`
+- **UI**: Tables page shows failed count badge (red) + last sync time; Settings page shows dead queue count + sync timestamp
+- **tsc --noEmit**: clean pass. `next build` fails on pre-existing Viva edge route issue (unrelated)

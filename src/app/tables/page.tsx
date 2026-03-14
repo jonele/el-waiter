@@ -21,7 +21,7 @@ const THEME_ICON: Record<Theme, string> = { dark: "🌙", grey: "🌫", light: "
 
 export default function TablesPage() {
   const router = useRouter();
-  const { waiter, settings, isOnline, pendingSyncs, theme, setTheme } = useWaiterStore();
+  const { waiter, settings, isOnline, pendingSyncs, failedSyncs, lastSyncedAt, theme, setTheme } = useWaiterStore();
   const [sections, setSections] = useState<DbFloorSection[]>([]);
   const [tables, setTables] = useState<DbTable[]>([]);
   const [orderTotals, setOrderTotals] = useState<Record<string, number>>({});
@@ -341,6 +341,16 @@ export default function TablesPage() {
           {pendingSyncs > 0 && (
             <span className="rounded-full bg-amber-500/20 text-amber-400 text-xs px-2 py-0.5 font-semibold">
               {pendingSyncs} εκκρεμή
+            </span>
+          )}
+          {failedSyncs > 0 && (
+            <span className="rounded-full bg-red-500/20 text-red-400 text-xs px-2 py-0.5 font-semibold">
+              {failedSyncs} απέτυχαν
+            </span>
+          )}
+          {pendingSyncs === 0 && failedSyncs === 0 && lastSyncedAt && (
+            <span className="text-[10px]" style={{ color: "var(--c-text2)" }}>
+              {new Date(lastSyncedAt).toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit" })}
             </span>
           )}
         </div>
