@@ -23,6 +23,8 @@ interface WaiterState {
   theme:           Theme;
   isOnline:        boolean;
   pendingSyncs:    number;
+  failedSyncs:     number;
+  lastSyncedAt:    string | null;
   deviceVenueId:   string | null;
   currentShiftId:  string | null;
 
@@ -34,6 +36,8 @@ interface WaiterState {
   setTheme:          (t: Theme) => void;
   setOnline:         (v: boolean) => void;
   setPendingSyncs:   (n: number)  => void;
+  setFailedSyncs:    (n: number)  => void;
+  setLastSyncedAt:   (ts: string | null) => void;
   setDeviceVenueId:  (id: string | null) => void;
 }
 
@@ -46,6 +50,8 @@ export const useWaiterStore = create<WaiterState>()(
       theme:           'dark' as Theme,
       isOnline:        true,
       pendingSyncs:    0,
+      failedSyncs:     0,
+      lastSyncedAt:    null,
       deviceVenueId:   null,
       currentShiftId:  null,
 
@@ -57,6 +63,8 @@ export const useWaiterStore = create<WaiterState>()(
       setTheme:          (theme)   => set({ theme }),
       setOnline:         (isOnline)     => set({ isOnline }),
       setPendingSyncs:   (pendingSyncs) => set({ pendingSyncs }),
+      setFailedSyncs:    (failedSyncs)  => set({ failedSyncs }),
+      setLastSyncedAt:   (lastSyncedAt) => set({ lastSyncedAt }),
       setDeviceVenueId:  (deviceVenueId) => set({ deviceVenueId }),
     }),
     {

@@ -21,6 +21,7 @@ export type {
   DbOrderItem,
   DbOrder,
   DbSyncItem,
+  DbFailedSyncItem,
   PaymentMethod,
   UnifiedDb,
 } from "./dbTypes";

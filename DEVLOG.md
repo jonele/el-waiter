@@ -65,3 +65,14 @@
 - **Capacitor config**: added CapacitorSQLite plugin config
 - **Zero breaking changes**: all existing imports (`waiterDb`, `getOpenOrder`, `calcTotal`, `getWaiterOrders`, types) work unchanged
 - **Pre-existing build issue**: Viva edge routes fail during `next build` without Supabase env vars (not related)
+
+## 2026-03-14 — Phase 2: FCM Push Notifications
+- **Goal**: Enable server-to-device push via Firebase Cloud Messaging (Capacitor wrapper)
+- **New files**:
+  - `src/lib/fcm.ts` — `initPushNotifications()`, `registerDeviceToken()`, `onNotificationReceived()`, `onNotificationTapped()`, `getFcmToken()`
+  - `src/components/PushNotificationHandler.tsx` — layout-level component: inits FCM on mount, upserts token on waiter login, shows in-app alert on foreground push, navigates on background tap
+- **Supabase migration** (`oiizzbiwxghmscvpjtbl`): `waiter_devices` table (venue_id, waiter_id, fcm_token, platform, device_name, last_seen) with RLS + anon policies
+- **Layout**: PushNotificationHandler added to layout.tsx alongside DbInitializer
+- **Platform guard**: all FCM code is no-op on web (Capacitor.isNativePlatform() check)
+- **Remaining manual steps**: Add `google-services.json` (Android) and `GoogleService-Info.plist` (iOS) from Firebase Console
+- **Next**: Phase 3 server-side push sender (when bill_request INSERT, query waiter_devices, send FCM via Firebase Admin SDK)

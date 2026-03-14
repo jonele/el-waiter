@@ -98,6 +98,16 @@ export interface DbSyncItem {
   retries: number;
 }
 
+export interface DbFailedSyncItem {
+  id?: number;
+  type: "order_send" | "table_status";
+  payload: string;
+  created_at: string;
+  failed_at: string;
+  retries: number;
+  last_error: string;
+}
+
 export function calcTotal(items: DbOrderItem[]): number {
   return items.reduce((s, i) => s + i.price * i.quantity, 0);
 }
@@ -183,5 +193,12 @@ export interface UnifiedDb {
     limit(n: number): { toArray(): Promise<DbSyncItem[]> };
     delete(id: number): Promise<void>;
     update(id: number, changes: Partial<DbSyncItem>): Promise<void>;
+  };
+  failedQueue: {
+    add(item: Omit<DbFailedSyncItem, "id"> & { id?: number }): Promise<void>;
+    count(): Promise<number>;
+    toArray(): Promise<DbFailedSyncItem[]>;
+    delete(id: number): Promise<void>;
+    clear(): Promise<void>;
   };
 }

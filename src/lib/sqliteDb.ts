@@ -16,6 +16,7 @@ import type {
   DbOrder,
   DbOrderItem,
   DbSyncItem,
+  DbFailedSyncItem,
   UnifiedDb,
 } from "./dbTypes";
 
@@ -210,6 +211,18 @@ async function createTables(): Promise<void> {
     );
   `);
 
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS failed_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      type TEXT NOT NULL,
+      payload TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      failed_at TEXT NOT NULL,
+      retries INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT NOT NULL DEFAULT ''
+    );
+  `);
+
   // Indexes
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_wp_venue ON waiter_profiles(venue_id);`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_fs_venue ON floor_sections(venue_id);`);
@@ -223,6 +236,8 @@ async function createTables(): Promise<void> {
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_ord_status ON orders(status);`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_ord_synced ON orders(synced);`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_sq_type ON sync_queue(type);`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_fq_type ON failed_queue(type);`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_fq_failed ON failed_queue(failed_at);`);
 
   // Migration tracking
   await db.execute(`
@@ -322,6 +337,15 @@ function rowToSyncItem(r: Record<string, unknown>): DbSyncItem {
     id: r.id as number, type: r.type as DbSyncItem["type"],
     payload: r.payload as string, created_at: r.created_at as string,
     retries: r.retries as number,
+  };
+}
+
+function rowToFailedSyncItem(r: Record<string, unknown>): DbFailedSyncItem {
+  return {
+    id: r.id as number, type: r.type as DbFailedSyncItem["type"],
+    payload: r.payload as string, created_at: r.created_at as string,
+    failed_at: r.failed_at as string, retries: r.retries as number,
+    last_error: r.last_error as string,
   };
 }
 
@@ -590,6 +614,35 @@ function createSQLiteAdapter(): UnifiedDb {
         await db.execute(`UPDATE sync_queue SET ${sets.join(", ")} WHERE id = ?`, vals);
       },
     },
+
+    failedQueue: {
+      async add(item) {
+        const db = await getDb();
+        await db.execute(
+          `INSERT INTO failed_queue (type,payload,created_at,failed_at,retries,last_error) VALUES (?,?,?,?,?,?)`,
+          [item.type, item.payload, item.created_at, item.failed_at, item.retries, item.last_error]
+        );
+      },
+      async count() {
+        const db = await getDb();
+        const res = await db.query(`SELECT COUNT(*) as cnt FROM failed_queue`);
+        if (!res.values || res.values.length === 0) return 0;
+        return (res.values[0].cnt as number) ?? 0;
+      },
+      async toArray() {
+        const db = await getDb();
+        const res = await db.query(`SELECT * FROM failed_queue ORDER BY failed_at DESC`);
+        return (res.values ?? []).map(rowToFailedSyncItem);
+      },
+      async delete(id) {
+        const db = await getDb();
+        await db.execute(`DELETE FROM failed_queue WHERE id = ?`, [id]);
+      },
+      async clear() {
+        const db = await getDb();
+        await db.execute(`DELETE FROM failed_queue`);
+      },
+    },
   };
 }
 
@@ -684,6 +737,13 @@ function createDexieAdapter(): UnifiedDb {
       }),
       delete: async (id: number) => { const d = await getDexie(); await d.syncQueue.delete(id); },
       update: async (id: number, changes: Partial<DbSyncItem>) => { const d = await getDexie(); await d.syncQueue.update(id, changes); },
+    },
+    failedQueue: {
+      add: async (item) => { const d = await getDexie(); await d.failedQueue.add(item as DbFailedSyncItem); },
+      count: async () => { const d = await getDexie(); return d.failedQueue.count(); },
+      toArray: async () => { const d = await getDexie(); return d.failedQueue.toArray(); },
+      delete: async (id: number) => { const d = await getDexie(); await d.failedQueue.delete(id); },
+      clear: async () => { const d = await getDexie(); await d.failedQueue.clear(); },
     },
   };
 }

@@ -6,6 +6,7 @@ import ConnectivityMonitor from "@/components/ConnectivityMonitor";
 import KdsListener from "@/components/KdsListener";
 import ThemeApplicator from "@/components/ThemeApplicator";
 import DbInitializer from "@/components/DbInitializer";
+import PushNotificationHandler from "@/components/PushNotificationHandler";
 
 const inter = Inter({ subsets: ["greek", "latin"] });
 
@@ -41,6 +42,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className={inter.className}>
         <ThemeApplicator />
         <DbInitializer />
+        <PushNotificationHandler />
         <ServiceWorkerRegistrar />
         <ConnectivityMonitor />
         <KdsListener />

@@ -17,6 +17,7 @@ import type {
   DbMenuItem,
   DbOrder,
   DbSyncItem,
+  DbFailedSyncItem,
 } from "./dbTypes";
 
 class WaiterDatabase extends Dexie {
@@ -27,6 +28,7 @@ class WaiterDatabase extends Dexie {
   menuItems!: Table<DbMenuItem>;
   orders!: Table<DbOrder>;
   syncQueue!: Table<DbSyncItem>;
+  failedQueue!: Table<DbFailedSyncItem>;
 
   constructor() {
     super("ElWaiter");
@@ -47,6 +49,16 @@ class WaiterDatabase extends Dexie {
       menuItems:      "id, venue_id, category_id, sort_order",
       orders:         "id, table_id, waiter_id, status, payment_method, synced, created_at",
       syncQueue:      "++id, type, created_at",
+    });
+    this.version(3).stores({
+      waiterProfiles: "id, venue_id, active",
+      floorSections:  "id, venue_id, sort_order",
+      posTables:      "id, venue_id, floor_section_id, status",
+      menuCategories: "id, venue_id, parent_id, sort_order",
+      menuItems:      "id, venue_id, category_id, sort_order",
+      orders:         "id, table_id, waiter_id, status, payment_method, synced, created_at",
+      syncQueue:      "++id, type, created_at",
+      failedQueue:    "++id, type, failed_at",
     });
   }
 }
