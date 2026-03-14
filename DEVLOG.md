@@ -1,4 +1,21 @@
 
+## 2026-03-14 — Shared Venue Config — Pull from POS
+
+### New Files
+- **`src/lib/venueConfig.ts`**: Creates a niceb2b Supabase client (`oiizzbiwxghmscvpjtbl`) and exports `pullVenueConfig(venueId)` — queries `venue_device_config` WHERE config_type='pos_master'. Returns printer IPs, fiscal details, Viva merchant ID, kitchen printers. Terminal ID intentionally excluded (stays local per waiter device).
+
+### Modified Files
+- **`src/store/waiterStore.ts`**: Added `venueConfig: VenueDeviceConfig | null` + `setVenueConfig()` to zustand store. Persisted to localStorage. Cleared on logout.
+- **`src/app/tables/page.tsx`**: On login (useEffect), fires `pullVenueConfig(waiter.venue_id)` — fire-and-forget, stores result in zustand. Components can now read `venueConfig` for printer IPs etc.
+
+### Design Decisions
+- Waiter inherits printer IPs, fiscal info, Viva merchant ID from POS master config
+- Terminal ID (Viva TID) is NEVER inherited — stays local per device
+- Any inherited setting can be overridden locally by the waiter
+- Config is pulled once on login/startup, cached in zustand + localStorage
+
+---
+
 ## 2026-03-06 — Zero-Friction UI Overhaul (Tables + Order Builder)
 - **brand** color → #3B82F6 (vibrant blue, was navy); **accent** → #10B981 (emerald for pay)
 - **touch-btn** → min 60px (was 48px), per Zero-Friction mandate

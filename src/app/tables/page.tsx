@@ -6,6 +6,7 @@ import { useWaiterStore } from "@/store/waiterStore";
 import { supabase } from "@/lib/supabase";
 import BottomNav from "@/components/BottomNav";
 import { registerPushNotifications } from "@/lib/pushNotifications";
+import { pullVenueConfig } from "@/lib/venueConfig";
 import type { DbTable, DbFloorSection, DbOrder } from "@/lib/waiterDb";
 import type { Theme } from "@/store/waiterStore";
 import type { BillRequest } from "@/lib/supabase";
@@ -21,7 +22,7 @@ const THEME_ICON: Record<Theme, string> = { dark: "🌙", grey: "🌫", light: "
 
 export default function TablesPage() {
   const router = useRouter();
-  const { waiter, settings, isOnline, pendingSyncs, failedSyncs, lastSyncedAt, theme, setTheme } = useWaiterStore();
+  const { waiter, settings, isOnline, pendingSyncs, failedSyncs, lastSyncedAt, theme, setTheme, setVenueConfig } = useWaiterStore();
   const [sections, setSections] = useState<DbFloorSection[]>([]);
   const [tables, setTables] = useState<DbTable[]>([]);
   const [orderTotals, setOrderTotals] = useState<Record<string, number>>({});
@@ -54,6 +55,10 @@ export default function TablesPage() {
     if (isOnline) {
       syncFromSupabase();
       fetchKitchenOrders();
+      // Pull shared venue config from POS (fire-and-forget)
+      void pullVenueConfig(waiter.venue_id).then((cfg) => {
+        if (cfg) setVenueConfig(cfg);
+      }).catch(() => {});
     }
     // Register native push notifications (no-op on web)
     void registerPushNotifications(waiter.id, waiter.venue_id);

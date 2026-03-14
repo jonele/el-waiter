@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { DbWaiterProfile, DbTable } from "@/lib/waiterDb";
+import type { VenueDeviceConfig } from "@/lib/venueConfig";
 
 export type Theme = 'dark' | 'grey' | 'light';
 
@@ -27,6 +28,7 @@ interface WaiterState {
   lastSyncedAt:    string | null;
   deviceVenueId:   string | null;
   currentShiftId:  string | null;
+  venueConfig:     VenueDeviceConfig | null;
 
   login:             (w: DbWaiterProfile) => void;
   logout:            () => void;
@@ -39,6 +41,7 @@ interface WaiterState {
   setFailedSyncs:    (n: number)  => void;
   setLastSyncedAt:   (ts: string | null) => void;
   setDeviceVenueId:  (id: string | null) => void;
+  setVenueConfig:    (c: VenueDeviceConfig | null) => void;
 }
 
 export const useWaiterStore = create<WaiterState>()(
@@ -54,9 +57,10 @@ export const useWaiterStore = create<WaiterState>()(
       lastSyncedAt:    null,
       deviceVenueId:   null,
       currentShiftId:  null,
+      venueConfig:     null,
 
       login:             (waiter)  => set({ waiter }),
-      logout:            ()        => set({ waiter: null, activeTable: null, currentShiftId: null }),
+      logout:            ()        => set({ waiter: null, activeTable: null, currentShiftId: null, venueConfig: null }),
       setCurrentShiftId: (id)      => set({ currentShiftId: id }),
       setActiveTable:    (t)       => set({ activeTable: t }),
       updateSettings:    (u)       => set((s) => ({ settings: { ...s.settings, ...u } })),
@@ -66,11 +70,12 @@ export const useWaiterStore = create<WaiterState>()(
       setFailedSyncs:    (failedSyncs)  => set({ failedSyncs }),
       setLastSyncedAt:   (lastSyncedAt) => set({ lastSyncedAt }),
       setDeviceVenueId:  (deviceVenueId) => set({ deviceVenueId }),
+      setVenueConfig:    (venueConfig) => set({ venueConfig }),
     }),
     {
       name:    "el-waiter",
       storage: createJSONStorage(() => localStorage),
-      partialize: (s) => ({ waiter: s.waiter, settings: s.settings, theme: s.theme, deviceVenueId: s.deviceVenueId, currentShiftId: s.currentShiftId }),
+      partialize: (s) => ({ waiter: s.waiter, settings: s.settings, theme: s.theme, deviceVenueId: s.deviceVenueId, currentShiftId: s.currentShiftId, venueConfig: s.venueConfig }),
     }
   )
 );
