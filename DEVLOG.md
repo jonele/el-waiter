@@ -1,4 +1,31 @@
 
+## 2026-03-14 — Split / Partial Payments UI
+
+### New Components
+- **`src/components/SplitModeSelector.tsx`**: 4-mode segmented control — Ολόκληρο / Κατ' Είδος / Ισόποσο / Ποσό. Tailwind, 60px touch, brand blue active state.
+- **`src/components/ItemSplitPicker.tsx`**: Checkbox list of unpaid order items with running subtotal. Already-paid items shown dimmed with strikethrough. Select all/none buttons. Confirm fires with selected item IDs + subtotal.
+- **`src/components/EqualSplitPicker.tsx`**: N-way split (2-6 people). Per-person amount with rounding handler (last person pays remainder). Progress bar for multi-round splits.
+
+### Modified Files
+- **`src/app/pay/page.tsx`**: Full rewrite for split payment flow:
+  - SplitModeSelector shown before payment method selection
+  - Item split: checkboxes for items, confirm sets split amount
+  - Equal split: N-picker, per-person amount with rounding
+  - Custom: freeform euro amount input with max validation
+  - Multi-round payment loop: after payment, if remaining > 0, stay on page for next split
+  - Paid splits progress bar (emerald) + split payment history
+  - Each split fires Viva ISV charge for split amount only
+  - Success screen: shows all split payments, remaining balance, "Επόμενη πληρωμή" button
+  - Table closes only when remaining = 0
+
+### Design
+- Tailwind CSS only (no inline styles)
+- 60px min touch targets, dark theme (bg-slate-950/900)
+- Brand blue (#3B82F6) for selections, emerald (#10B981) for pay/success
+- All Greek labels
+
+---
+
 ## 2026-03-14 — Shared Venue Config — Pull from POS
 
 ### New Files
