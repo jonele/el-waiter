@@ -50,3 +50,18 @@
 - deviceVenueId added to waiterStore (persisted, device-level venue binding)
 - lookupWaiterByPin + lookupWaiterByQrToken added to supabase.ts
 - Settings syncAll now uses deviceVenueId fallback
+
+## 2026-03-14 — Phase 1: SQLite Offline-First Architecture
+- **Goal**: Replace Dexie/IndexedDB with @capacitor-community/sqlite on native (iOS/Android)
+- **Architecture**: 3-layer file split to avoid circular imports:
+  - `dbTypes.ts` — all interfaces + UnifiedDb type definition
+  - `dexieDb.ts` — pure Dexie class (web fallback + migration source)
+  - `sqliteDb.ts` — SQLite adapter (native) + Dexie adapter (web) + migration logic
+  - `waiterDb.ts` — thin re-export layer, backward-compatible (same exports as before)
+- **Runtime detection**: `Capacitor.isNativePlatform()` — SQLite on native, Dexie on web
+- **SQLite schema**: 7 tables mirroring Dexie stores + indexes + _migrations tracking
+- **One-time migration**: `migrateDexieToSQLite()` moves all data from IndexedDB to SQLite on first native boot
+- **DbInitializer component**: calls `initDb()` at app startup (added to layout.tsx)
+- **Capacitor config**: added CapacitorSQLite plugin config
+- **Zero breaking changes**: all existing imports (`waiterDb`, `getOpenOrder`, `calcTotal`, `getWaiterOrders`, types) work unchanged
+- **Pre-existing build issue**: Viva edge routes fail during `next build` without Supabase env vars (not related)

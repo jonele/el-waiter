@@ -5,6 +5,7 @@ import ServiceWorkerRegistrar from "@/components/ServiceWorkerRegistrar";
 import ConnectivityMonitor from "@/components/ConnectivityMonitor";
 import KdsListener from "@/components/KdsListener";
 import ThemeApplicator from "@/components/ThemeApplicator";
+import DbInitializer from "@/components/DbInitializer";
 
 const inter = Inter({ subsets: ["greek", "latin"] });
 
@@ -39,6 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body className={inter.className}>
         <ThemeApplicator />
+        <DbInitializer />
         <ServiceWorkerRegistrar />
         <ConnectivityMonitor />
         <KdsListener />

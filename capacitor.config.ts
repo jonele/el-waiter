@@ -9,6 +9,11 @@ const config: CapacitorConfig = {
     cleartext: false,
   },
   plugins: {
+    CapacitorSQLite: {
+      iosDatabaseLocation: "Library/CapacitorDatabase",
+      iosIsEncryption: false,
+      androidIsEncryption: false,
+    },
     PushNotifications: {
       presentationOptions: ["badge", "sound", "alert"],
     },
