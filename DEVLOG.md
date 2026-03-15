@@ -1,4 +1,14 @@
 
+## 2026-03-15 — EL-POS Auto-Updater Endpoint
+
+### New API Route
+- **`src/app/api/pos-update/[...params]/route.ts`**: Tauri v2 updater endpoint for EL-POS
+  - `GET /api/pos-update/{target}/{arch}/{current_version}`
+  - Reads latest release from `github.com/jonele/el-pos/releases/latest`
+  - Compares semver — returns 204 (up to date) or 200 with download URL + version JSON
+  - 5-minute in-memory cache for GitHub API responses to avoid rate limits
+  - Download URL points to `el-os-downloads` repo raw file
+
 ## 2026-03-14 — Split / Partial Payments UI
 
 ### New Components
