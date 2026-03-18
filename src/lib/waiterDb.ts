@@ -24,6 +24,8 @@ export type {
   DbFailedSyncItem,
   PaymentMethod,
   UnifiedDb,
+  RsrvReservation,
+  WaitlistEntry,
 } from "./dbTypes";
 
 export { calcTotal } from "./dbTypes";

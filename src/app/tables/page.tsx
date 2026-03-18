@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { waiterDb } from "@/lib/waiterDb";
 import { useWaiterStore } from "@/store/waiterStore";
@@ -7,7 +7,7 @@ import { supabase } from "@/lib/supabase";
 import BottomNav from "@/components/BottomNav";
 import { registerPushNotifications } from "@/lib/pushNotifications";
 import { pullVenueConfig } from "@/lib/venueConfig";
-import type { DbTable, DbFloorSection, DbOrder } from "@/lib/waiterDb";
+import type { DbTable, DbFloorSection, DbOrder, RsrvReservation, WaitlistEntry } from "@/lib/waiterDb";
 import type { Theme } from "@/store/waiterStore";
 import type { BillRequest } from "@/lib/supabase";
 
@@ -18,17 +18,83 @@ const STATUS_BG: Record<string, { bg: string; border: string; dot: string; dotCl
 };
 
 const THEME_CYCLE: Theme[] = ["dark", "grey", "light"];
-const THEME_ICON: Record<Theme, string> = { dark: "🌙", grey: "🌫", light: "☀️" };
+const THEME_ICON: Record<Theme, string> = { dark: "\uD83C\uDF19", grey: "\uD83C\uDF2B", light: "\u2600\uFE0F" };
+
+type PageTab = "tables" | "reservations" | "waitlist";
+
+const RSRV_STATUS_COLOR: Record<string, { bg: string; text: string }> = {
+  pending:   { bg: "rgba(245,158,11,0.25)", text: "#fbbf24" },
+  confirmed: { bg: "rgba(59,130,246,0.25)", text: "#60a5fa" },
+  seated:    { bg: "rgba(239,68,68,0.25)",  text: "#f87171" },
+  completed: { bg: "rgba(161,161,170,0.2)", text: "#a1a1aa" },
+  cancelled: { bg: "rgba(161,161,170,0.2)", text: "#a1a1aa" },
+  no_show:   { bg: "rgba(161,161,170,0.2)", text: "#a1a1aa" },
+};
+
+const SOURCE_EMOJI: Record<string, string> = {
+  phone: "\uD83D\uDCDE",
+  walk_in: "\uD83D\uDEB6",
+  website: "\uD83C\uDF10",
+  app: "\uD83D\uDCF1",
+  vip: "\uD83D\uDC51",
+  instagram: "\uD83D\uDCF7",
+  google: "G",
+};
+
+const SITTING_OPTIONS = [
+  { label: "1:30", minutes: 90 },
+  { label: "2:00", minutes: 120 },
+  { label: "4:00", minutes: 240 },
+  { label: "\u0391\u03BD\u03BF\u03B9\u03C7\u03C4\u03CC", minutes: 0 },
+];
+
+const WALK_IN_SOURCES = [
+  { key: "walk_in", emoji: "\uD83D\uDEB6", label: "Walk-in" },
+  { key: "phone", emoji: "\uD83D\uDCDE", label: "\u03A4\u03B7\u03BB" },
+  { key: "vip", emoji: "\uD83D\uDC51", label: "VIP" },
+  { key: "instagram", emoji: "\uD83D\uDCF7", label: "Insta" },
+  { key: "google", emoji: "G", label: "Google" },
+];
+
+function todayStr() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+function nowTimeStr() {
+  const d = new Date();
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function minutesAgo(iso: string): number {
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+}
+
+function isLate(reservation: RsrvReservation): boolean {
+  if (reservation.status !== "confirmed" && reservation.status !== "pending") return false;
+  const [h, m] = reservation.reservation_time.split(":").map(Number);
+  const resTime = new Date();
+  resTime.setHours(h, m, 0, 0);
+  return Date.now() - resTime.getTime() > 15 * 60 * 1000;
+}
+
+function lastName(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/);
+  return parts.length > 1 ? parts[parts.length - 1] : parts[0];
+}
 
 export default function TablesPage() {
   const router = useRouter();
-  const { waiter, settings, isOnline, pendingSyncs, failedSyncs, lastSyncedAt, theme, setTheme, setVenueConfig } = useWaiterStore();
+  const { waiter, settings, isOnline, pendingSyncs, failedSyncs, lastSyncedAt, theme, setTheme, setVenueConfig, deviceVenueId } = useWaiterStore();
   const [sections, setSections] = useState<DbFloorSection[]>([]);
   const [tables, setTables] = useState<DbTable[]>([]);
   const [orderTotals, setOrderTotals] = useState<Record<string, number>>({});
   const [activeSection, setActiveSection] = useState<string>("all");
   const [syncing, setSyncing] = useState(false);
   const [tableSearch, setTableSearch] = useState("");
+
+  // Page-level tab
+  const [pageTab, setPageTab] = useState<PageTab>("tables");
 
   // Move request state
   const [moveReqSource, setMoveReqSource] = useState<DbTable | null>(null);
@@ -48,6 +114,82 @@ export default function TablesPage() {
   const [msgTarget, setMsgTarget] = useState("boss");
   const [msgBody, setMsgBody] = useState("");
   const [incomingMsg, setIncomingMsg] = useState<{ from: string; body: string } | null>(null);
+
+  // Reservation state
+  const [reservations, setReservations] = useState<RsrvReservation[]>([]);
+  const [rsrvLoading, setRsrvLoading] = useState(false);
+  const [selectedRsrv, setSelectedRsrv] = useState<RsrvReservation | null>(null);
+  const [rsrvAssignMode, setRsrvAssignMode] = useState(false);
+  const rsrvInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Waitlist state
+  const [waitlist, setWaitlist] = useState<WaitlistEntry[]>([]);
+  const [waitLoading, setWaitLoading] = useState(false);
+  const [showAddWaitlist, setShowAddWaitlist] = useState(false);
+  const [wlName, setWlName] = useState("");
+  const [wlSize, setWlSize] = useState(2);
+  const [wlPhone, setWlPhone] = useState("");
+  const [selectedWl, setSelectedWl] = useState<WaitlistEntry | null>(null);
+  const [wlAssignMode, setWlAssignMode] = useState(false);
+
+  // Walk-in bottom sheet state
+  const [walkInTable, setWalkInTable] = useState<DbTable | null>(null);
+  const [wiName, setWiName] = useState("");
+  const [wiPhone, setWiPhone] = useState("");
+  const [wiSize, setWiSize] = useState(2);
+  const [wiSitting, setWiSitting] = useState(240);
+  const [wiSource, setWiSource] = useState("walk_in");
+  const [wiSubmitting, setWiSubmitting] = useState(false);
+
+  const venueId = deviceVenueId || waiter?.venue_id || "";
+
+  // ---------- Reservation fetch ----------
+  const fetchReservations = useCallback(async () => {
+    if (!venueId) return;
+    setRsrvLoading(true);
+    try {
+      const r = await fetch(`/api/rsrv/reservations?venueId=${encodeURIComponent(venueId)}&date=${todayStr()}`);
+      if (r.ok) {
+        const data = await r.json();
+        setReservations(Array.isArray(data) ? data : (data.reservations ?? []));
+      }
+    } catch { /* offline — keep stale */ }
+    setRsrvLoading(false);
+  }, [venueId]);
+
+  // ---------- Waitlist fetch ----------
+  const fetchWaitlist = useCallback(async () => {
+    if (!venueId) return;
+    setWaitLoading(true);
+    try {
+      const r = await fetch(`/api/rsrv/waitlist?venueId=${encodeURIComponent(venueId)}`);
+      if (r.ok) {
+        const data = await r.json();
+        setWaitlist(Array.isArray(data) ? data : (data.waitlist ?? []));
+      }
+    } catch { /* offline */ }
+    setWaitLoading(false);
+  }, [venueId]);
+
+  // ---------- Auto-poll reservations ----------
+  useEffect(() => {
+    if (pageTab === "reservations") {
+      void fetchReservations();
+      rsrvInterval.current = setInterval(fetchReservations, 30000);
+      return () => { if (rsrvInterval.current) clearInterval(rsrvInterval.current); };
+    }
+    if (pageTab === "waitlist") {
+      void fetchWaitlist();
+      const iv = setInterval(fetchWaitlist, 30000);
+      return () => clearInterval(iv);
+    }
+    return () => { if (rsrvInterval.current) clearInterval(rsrvInterval.current); };
+  }, [pageTab, fetchReservations, fetchWaitlist]);
+
+  // Also fetch reservations on initial mount for table overlay data
+  useEffect(() => {
+    if (venueId) void fetchReservations();
+  }, [venueId, fetchReservations]);
 
   useEffect(() => {
     if (!waiter) { router.replace("/"); return; }
@@ -74,13 +216,13 @@ export default function TablesPage() {
   // Staff @mention realtime subscription for incoming messages
   useEffect(() => {
     if (!supabase || !waiter?.venue_id) return;
-    const venueId = waiter.venue_id;
+    const vid = waiter.venue_id;
     const waiterName = (waiter.name ?? "").toLowerCase();
     const channel = supabase
-      .channel(`staff-msgs-waiter-${venueId}`)
+      .channel(`staff-msgs-waiter-${vid}`)
       .on(
         "postgres_changes",
-        { event: "INSERT", schema: "public", table: "pos_staff_messages", filter: `venue_id=eq.${venueId}` },
+        { event: "INSERT", schema: "public", table: "pos_staff_messages", filter: `venue_id=eq.${vid}` },
         (payload) => {
           const msg = payload.new as { from_name: string; to_target: string; body: string };
           const isForUs =
@@ -99,12 +241,12 @@ export default function TablesPage() {
   // Realtime: live pos_tables status updates + hostess bill notifications
   useEffect(() => {
     if (!supabase || !waiter?.venue_id) return;
-    const venueId = waiter.venue_id;
+    const vid = waiter.venue_id;
     const isHostess = waiter.role?.toLowerCase() === "hostess";
 
     const ch = supabase
-      .channel(`tables-live-${venueId}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "pos_tables", filter: `venue_id=eq.${venueId}` },
+      .channel(`tables-live-${vid}`)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "pos_tables", filter: `venue_id=eq.${vid}` },
         (payload) => {
           const row = payload.new as { id: string; status: string; seated_customer_name?: string };
           setTables((prev) => prev.map((t) =>
@@ -114,10 +256,10 @@ export default function TablesPage() {
       );
 
     if (isHostess) {
-      ch.on("postgres_changes", { event: "INSERT", schema: "public", table: "bill_requests", filter: `venue_id=eq.${venueId}` },
+      ch.on("postgres_changes", { event: "INSERT", schema: "public", table: "bill_requests", filter: `venue_id=eq.${vid}` },
         (payload) => {
           const row = payload.new as { table_name: string; waiter_name?: string };
-          setIncomingMsg({ from: "🧾 Λογαριασμός", body: `Τραπέζι ${row.table_name}${row.waiter_name ? ` (${row.waiter_name})` : ""}` });
+          setIncomingMsg({ from: "\uD83E\uDDFE \u039B\u03BF\u03B3\u03B1\u03C1\u03B9\u03B1\u03C3\u03BC\u03CC\u03C2", body: `\u03A4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9 ${row.table_name}${row.waiter_name ? ` (${row.waiter_name})` : ""}` });
           setTimeout(() => setIncomingMsg(null), 5000);
         }
       );
@@ -179,7 +321,6 @@ export default function TablesPage() {
       .eq("venue_id", waiter.venue_id)
       .order("created_at", { ascending: false });
     if (!data) return;
-    // Keep only the latest order per tab_name
     const map: Record<string, "pending" | "in_progress" | "done"> = {};
     for (const row of data) {
       if (!map[row.tab_name]) {
@@ -191,7 +332,7 @@ export default function TablesPage() {
 
   async function submitBillRequest(t: DbTable) {
     if (!supabase || !waiter) return;
-    if (pendingBillTableId === t.id) return; // already pending
+    if (pendingBillTableId === t.id) return;
     const { data, error } = await supabase
       .from("bill_requests")
       .insert({
@@ -205,7 +346,6 @@ export default function TablesPage() {
       .select("id")
       .single();
     if (error || !data) return;
-    // Update pos_table status so RSRV floor plan shows amber "leaving soon"
     void supabase.from("pos_tables").update({ status: "bill_requested" }).eq("id", t.id);
     setPendingBillTableId(t.id);
     subscribeToBillRequest(data.id as string, t.id);
@@ -267,7 +407,6 @@ export default function TablesPage() {
       }, async (payload) => {
         const row = payload.new as { status: string };
         if (row.status === "approved") {
-          // Move all open/sent orders from `from` table to `to` table in Dexie
           const orders = await waiterDb.orders
             .where("table_id").equals(from.id)
             .filter((o: DbOrder) => o.status === "open" || o.status === "sent")
@@ -277,7 +416,6 @@ export default function TablesPage() {
           }
           await waiterDb.posTables.update(from.id, { status: "free" });
           await waiterDb.posTables.update(to.id, { status: "occupied" });
-          // Sync to Supabase pos_tables so EL-POS HostessPanel + EL-Loyal Hostess reflect the move
           void supabase!.from("pos_tables").update({ status: "free" }).eq("id", from.id);
           void supabase!.from("pos_tables").update({ status: "occupied" }).eq("id", to.id);
           setPendingMoveId(null);
@@ -295,11 +433,91 @@ export default function TablesPage() {
       .subscribe();
   }
 
+  // ---------- RSRV actions ----------
+  async function patchRsrvStatus(reservationId: string, status: string) {
+    await fetch("/api/rsrv/status", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reservationId, status, venueId }),
+    });
+    setSelectedRsrv(null);
+    setRsrvAssignMode(false);
+    void fetchReservations();
+  }
+
+  async function assignTableToRsrv(rsrv: RsrvReservation, table: DbTable) {
+    await fetch("/api/rsrv/status", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reservationId: rsrv.id, status: "seated", venueId, table_id: table.id }),
+    });
+    setSelectedRsrv(null);
+    setRsrvAssignMode(false);
+    void fetchReservations();
+  }
+
+  // ---------- Walk-in submit ----------
+  async function submitWalkIn() {
+    if (!walkInTable || wiSubmitting) return;
+    setWiSubmitting(true);
+    try {
+      await fetch("/api/rsrv/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          venue_id: venueId,
+          customer_name: wiName.trim() || "Walk-in",
+          customer_phone: wiPhone.trim() || null,
+          party_size: wiSize,
+          reservation_date: todayStr(),
+          reservation_time: nowTimeStr(),
+          status: "seated",
+          source: wiSource,
+          table_id: walkInTable.id,
+          has_children: false,
+          dietary_notes: null,
+          staff_notes: wiSitting > 0 ? `Sitting: ${wiSitting}min` : null,
+        }),
+      });
+      // Navigate to order
+      useWaiterStore.getState().setActiveTable(walkInTable);
+      setWalkInTable(null);
+      setWiName(""); setWiPhone(""); setWiSize(2); setWiSitting(240); setWiSource("walk_in");
+      router.push("/order");
+    } catch { /* keep sheet open */ }
+    setWiSubmitting(false);
+  }
+
+  // ---------- Waitlist add ----------
+  async function addToWaitlist() {
+    if (!wlName.trim()) return;
+    await fetch("/api/rsrv/waitlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        venue_id: venueId,
+        party_name: wlName.trim(),
+        party_size: wlSize,
+        phone: wlPhone.trim() || null,
+      }),
+    });
+    setShowAddWaitlist(false);
+    setWlName(""); setWlSize(2); setWlPhone("");
+    void fetchWaitlist();
+  }
+
+  // ---------- Table-level reservation lookup ----------
+  const tableReservationMap: Record<string, RsrvReservation> = {};
+  for (const r of reservations) {
+    if (r.table_id && (r.status === "confirmed" || r.status === "pending" || r.status === "seated")) {
+      tableReservationMap[r.table_id] = r;
+    }
+  }
+
   const filtered = tables
     .filter((t) => activeSection === "all" || t.floor_section_id === activeSection)
     .filter((t) => !tableSearch || t.name.toLowerCase().includes(tableSearch.toLowerCase()));
 
-  // Jump directly to table if exact match
   function handleTableSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter" && tableSearch) {
       const exact = filtered.find(
@@ -314,10 +532,61 @@ export default function TablesPage() {
     router.push("/order");
   }
 
+  function handleTableTap(t: DbTable) {
+    // If in assignment mode for reservation
+    if (rsrvAssignMode && selectedRsrv) {
+      void assignTableToRsrv(selectedRsrv, t);
+      return;
+    }
+    // If in assignment mode for waitlist
+    if (wlAssignMode && selectedWl) {
+      void assignTableToWl(selectedWl, t);
+      return;
+    }
+    // Normal table tap
+    openTable(t);
+  }
+
+  function handleEmptyTableLongPress(t: DbTable) {
+    const isOccupied = t.status === "occupied" || orderTotals[t.id] !== undefined;
+    if (!isOccupied) {
+      setWalkInTable(t);
+    }
+  }
+
+  async function assignTableToWl(wl: WaitlistEntry, table: DbTable) {
+    // Create a reservation from waitlist entry, then seat them
+    await fetch("/api/rsrv/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        venue_id: venueId,
+        customer_name: wl.party_name,
+        customer_phone: wl.phone || null,
+        party_size: wl.party_size,
+        reservation_date: todayStr(),
+        reservation_time: nowTimeStr(),
+        status: "seated",
+        source: "waitlist",
+        table_id: table.id,
+        has_children: false,
+        dietary_notes: null,
+        staff_notes: null,
+      }),
+    });
+    setSelectedWl(null);
+    setWlAssignMode(false);
+    void fetchWaitlist();
+    void fetchReservations();
+  }
+
   function cycleTheme() {
     const next = THEME_CYCLE[(THEME_CYCLE.indexOf(theme) + 1) % THEME_CYCLE.length];
     setTheme(next);
   }
+
+  // Suppress unused var warnings
+  void pendingMoveId;
 
   return (
     <div className="flex h-screen flex-col" style={{ background: "var(--c-bg)" }}>
@@ -332,25 +601,25 @@ export default function TablesPage() {
             className="w-10 h-10 rounded-full flex items-center justify-center text-2xl shrink-0"
             style={{ background: "var(--c-surface2)" }}
           >
-            {waiter?.icon || "👤"}
+            {waiter?.icon || "\uD83D\uDC64"}
           </div>
           <div className="flex flex-col leading-tight">
             <span className="font-semibold text-sm" style={{ color: "var(--c-text)" }}>{waiter?.name}</span>
             <div className="flex items-center gap-1.5">
               <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? "bg-green-400 animate-pulse" : "bg-red-500"}`} />
               <span className="text-[10px]" style={{ color: "var(--c-text2)" }}>
-                {isOnline ? "Συνδεδεμένος" : "Εκτός σύνδεσης"}
+                {isOnline ? "\u03A3\u03C5\u03BD\u03B4\u03B5\u03B4\u03B5\u03BC\u03AD\u03BD\u03BF\u03C2" : "\u0395\u03BA\u03C4\u03CC\u03C2 \u03C3\u03CD\u03BD\u03B4\u03B5\u03C3\u03B7\u03C2"}
               </span>
             </div>
           </div>
           {pendingSyncs > 0 && (
             <span className="rounded-full bg-amber-500/20 text-amber-400 text-xs px-2 py-0.5 font-semibold">
-              {pendingSyncs} εκκρεμή
+              {pendingSyncs} \u03B5\u03BA\u03BA\u03C1\u03B5\u03BC\u03AE
             </span>
           )}
           {failedSyncs > 0 && (
             <span className="rounded-full bg-red-500/20 text-red-400 text-xs px-2 py-0.5 font-semibold">
-              {failedSyncs} απέτυχαν
+              {failedSyncs} \u03B1\u03C0\u03AD\u03C4\u03C5\u03C7\u03B1\u03BD
             </span>
           )}
           {pendingSyncs === 0 && failedSyncs === 0 && lastSyncedAt && (
@@ -361,20 +630,18 @@ export default function TablesPage() {
         </div>
 
         <div className="flex items-center -mr-2">
-          {/* Message button */}
           <button
             onClick={() => setShowMessageSheet(true)}
             className="flex items-center justify-center w-[60px] h-[60px] text-xl transition-transform active:scale-90"
-            aria-label="Μήνυμα προσωπικού"
+            aria-label="\u039C\u03AE\u03BD\u03C5\u03BC\u03B1 \u03C0\u03C1\u03BF\u03C3\u03C9\u03C0\u03B9\u03BA\u03BF\u03CD"
             style={{ color: "var(--c-text2)" }}
           >
             {"\uD83D\uDCAC"}
           </button>
-          {/* Theme toggle */}
           <button
             onClick={cycleTheme}
             className="flex items-center justify-center w-[60px] h-[60px] text-xl transition-transform active:scale-90"
-            aria-label="Αλλαγή θέματος"
+            aria-label="\u0391\u03BB\u03BB\u03B1\u03B3\u03AE \u03B8\u03AD\u03BC\u03B1\u03C4\u03BF\u03C2"
           >
             {THEME_ICON[theme]}
           </button>
@@ -382,7 +649,7 @@ export default function TablesPage() {
             onClick={() => router.push("/wallet")}
             className="flex items-center justify-center w-[60px] h-[60px] transition-colors active:opacity-60"
             style={{ color: "var(--c-text2)" }}
-            aria-label="Πορτοφόλι"
+            aria-label="\u03A0\u03BF\u03C1\u03C4\u03BF\u03C6\u03CC\u03BB\u03B9"
           >
             <WalletSvg />
           </button>
@@ -390,7 +657,7 @@ export default function TablesPage() {
             onClick={() => router.push("/settings")}
             className="flex items-center justify-center w-[60px] h-[60px] transition-colors active:opacity-60"
             style={{ color: "var(--c-text2)" }}
-            aria-label="Ρυθμίσεις"
+            aria-label="\u03A1\u03C5\u03B8\u03BC\u03AF\u03C3\u03B5\u03B9\u03C2"
           >
             <GearSvg />
           </button>
@@ -398,12 +665,12 @@ export default function TablesPage() {
       </div>
 
       {/* Section tabs */}
-      {sections.length > 0 && (
+      {sections.length > 0 && pageTab === "tables" && (
         <div
           className="flex gap-2 overflow-x-auto px-4 py-2.5 border-b shrink-0"
           style={{ background: "var(--c-bg)", borderColor: "var(--c-border)" }}
         >
-          {[{ id: "all", name: "Όλα" }, ...sections].map((s) => (
+          {[{ id: "all", name: "\u038C\u03BB\u03B1" }, ...sections].map((s) => (
             <button
               key={s.id}
               onClick={() => setActiveSection(s.id)}
@@ -418,181 +685,691 @@ export default function TablesPage() {
         </div>
       )}
 
-      {/* Table number search bar */}
-      <div className="px-4 pt-3 pb-1 shrink-0">
-        <input
-          type="text"
-          inputMode="numeric"
-          value={tableSearch}
-          onChange={(e) => setTableSearch(e.target.value)}
-          onKeyDown={handleTableSearchKey}
-          placeholder="Αριθμός τραπεζιού..."
-          className="w-full rounded-2xl px-4 py-3 text-base font-semibold outline-none"
-          style={{
-            background: "var(--c-surface2)",
-            color: "var(--c-text)",
-            border: `1.5px solid ${tableSearch ? "var(--brand, #3B82F6)" : "var(--c-border)"}`,
-          }}
-        />
+      {/* Page-level tabs: Trapetzia | Kratiseis | Anamoni */}
+      <div
+        className="flex gap-2 overflow-x-auto px-4 py-2 border-b shrink-0"
+        style={{ background: "var(--c-bg)", borderColor: "var(--c-border)" }}
+      >
+        {([
+          { key: "tables" as PageTab, label: "\u03A4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9\u03B1" },
+          { key: "reservations" as PageTab, label: "\u039A\u03C1\u03B1\u03C4\u03AE\u03C3\u03B5\u03B9\u03C2" },
+          { key: "waitlist" as PageTab, label: "\u0391\u03BD\u03B1\u03BC\u03BF\u03BD\u03AE" },
+        ]).map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setPageTab(tab.key)}
+            className={`shrink-0 rounded-full px-5 h-10 text-sm font-semibold transition-colors ${
+              pageTab === tab.key ? "bg-brand text-white" : "active:opacity-70"
+            }`}
+            style={pageTab !== tab.key ? { background: "var(--c-surface2)", color: "var(--c-text2)" } : {}}
+          >
+            {tab.label}
+            {tab.key === "reservations" && reservations.filter(r => r.status === "confirmed" || r.status === "pending").length > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold" style={{ background: "rgba(255,255,255,0.25)" }}>
+                {reservations.filter(r => r.status === "confirmed" || r.status === "pending").length}
+              </span>
+            )}
+            {tab.key === "waitlist" && waitlist.length > 0 && (
+              <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold" style={{ background: "rgba(255,255,255,0.25)" }}>
+                {waitlist.length}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
-      {/* Tables grid */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(80px+env(safe-area-inset-bottom))]">
-        {syncing && tables.length === 0 && (
-          <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>Συγχρονισμός...</p>
-        )}
-        {!syncing && filtered.length === 0 && (
-          <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>Δεν βρέθηκαν τραπέζια</p>
-        )}
-        <div className="grid grid-cols-3 gap-3">
-          {filtered.map((t) => {
-            const total = orderTotals[t.id];
-            const minOk = !settings.minConsumptionEur || !total || total >= settings.minConsumptionEur;
-            const st = STATUS_BG[t.status] ?? STATUS_BG.free;
-            const isPendingMove = pendingMoveTableId === t.id;
-            const isDenied = moveDenied === t.id;
-            const isOccupied = t.status === "occupied" || orderTotals[t.id] !== undefined;
-            const isPendingBill = pendingBillTableId === t.id;
-            const isBillFlash = billFlash?.tableId === t.id;
-            const kitchenSt = kitchenStatus[t.name];
-            return (
+      {/* ============ TABLES TAB ============ */}
+      {pageTab === "tables" && (
+        <>
+          {/* Table number search bar */}
+          <div className="px-4 pt-3 pb-1 shrink-0">
+            <input
+              type="text"
+              inputMode="numeric"
+              value={tableSearch}
+              onChange={(e) => setTableSearch(e.target.value)}
+              onKeyDown={handleTableSearchKey}
+              placeholder="\u0391\u03C1\u03B9\u03B8\u03BC\u03CC\u03C2 \u03C4\u03C1\u03B1\u03C0\u03B5\u03B6\u03B9\u03BF\u03CD..."
+              className="w-full rounded-2xl px-4 py-3 text-base font-semibold outline-none"
+              style={{
+                background: "var(--c-surface2)",
+                color: "var(--c-text)",
+                border: `1.5px solid ${tableSearch ? "var(--brand, #3B82F6)" : "var(--c-border)"}`,
+              }}
+            />
+          </div>
+
+          {/* Assignment mode banner */}
+          {(rsrvAssignMode || wlAssignMode) && (
+            <div
+              className="mx-4 mt-2 rounded-2xl px-4 py-3 flex items-center justify-between"
+              style={{ background: "rgba(59,130,246,0.2)", border: "1px solid rgba(59,130,246,0.4)" }}
+            >
+              <span className="text-sm font-semibold" style={{ color: "#60a5fa" }}>
+                {"\u0395\u03C0\u03B9\u03BB\u03AD\u03BE\u03C4\u03B5 \u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9 \u03B3\u03B9\u03B1: "}{rsrvAssignMode ? selectedRsrv?.customer_name : selectedWl?.party_name}
+              </span>
               <button
-                key={t.id}
-                onClick={() => openTable(t)}
-                className="relative flex flex-col items-center justify-center gap-1 rounded-3xl border-2 min-h-[96px] px-2 py-4 transition-transform active:scale-90 duration-100"
-                style={{ background: st.bg, borderColor: st.border, boxShadow: "var(--c-card-shadow)" }}
+                onClick={() => { setRsrvAssignMode(false); setWlAssignMode(false); setSelectedRsrv(null); setSelectedWl(null); }}
+                className="w-[60px] h-[40px] rounded-xl flex items-center justify-center text-sm font-bold transition-transform active:scale-90"
+                style={{ background: "rgba(239,68,68,0.2)", color: "#f87171" }}
               >
-                {/* Status dot — hide on occupied when bill button shown */}
-                {!isOccupied && (
-                  <span
-                    className={`absolute top-2.5 right-2.5 h-2.5 w-2.5 rounded-full ${st.dotCls}`}
-                    style={{ background: st.dot }}
-                  />
-                )}
-                {!minOk && (
-                  <span className="absolute top-2 left-2 text-xs text-amber-400 leading-none">⚠</span>
-                )}
+                {"\u0391\u03BA\u03CD\u03C1\u03C9\u03C3\u03B7"}
+              </button>
+            </div>
+          )}
 
-                {/* Move button — only on occupied tables that are not pending */}
-                {isOccupied && !isPendingMove && (
+          {/* Tables grid */}
+          <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(80px+env(safe-area-inset-bottom))]">
+            {syncing && tables.length === 0 && (
+              <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u03A3\u03C5\u03B3\u03C7\u03C1\u03BF\u03BD\u03B9\u03C3\u03BC\u03CC\u03C2..."}</p>
+            )}
+            {!syncing && filtered.length === 0 && (
+              <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u0394\u03B5\u03BD \u03B2\u03C1\u03AD\u03B8\u03B7\u03BA\u03B1\u03BD \u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9\u03B1"}</p>
+            )}
+            <div className="grid grid-cols-3 gap-3">
+              {filtered.map((t) => {
+                const total = orderTotals[t.id];
+                const minOk = !settings.minConsumptionEur || !total || total >= settings.minConsumptionEur;
+                const st = STATUS_BG[t.status] ?? STATUS_BG.free;
+                const isPendingMove = pendingMoveTableId === t.id;
+                const isDenied = moveDenied === t.id;
+                const isOccupied = t.status === "occupied" || orderTotals[t.id] !== undefined;
+                const isPendingBill = pendingBillTableId === t.id;
+                const isBillFlash = billFlash?.tableId === t.id;
+                const kitchenSt = kitchenStatus[t.name];
+                const tblRsrv = tableReservationMap[t.id];
+                const tblLate = tblRsrv ? isLate(tblRsrv) : false;
+                return (
                   <button
-                    className="absolute top-1.5 left-1.5 w-9 h-9 rounded-xl flex items-center justify-center text-base font-bold transition-transform active:scale-90"
-                    style={{ background: "rgba(245,158,11,0.25)", color: "#fbbf24" }}
-                    onClick={(e) => { e.stopPropagation(); setMoveReqSource(t); }}
-                  >
-                    ⇄
-                  </button>
-                )}
-
-                {/* Bill request button — top-right, only on occupied tables */}
-                {isOccupied && !isPendingMove && !isBillFlash && (
-                  <button
-                    className="absolute top-1.5 right-1.5 w-9 h-9 rounded-xl flex items-center justify-center text-base transition-transform active:scale-90"
-                    style={{
-                      background: isPendingBill ? "rgba(245,158,11,0.35)" : "rgba(255,255,255,0.12)",
-                      color: isPendingBill ? "#fbbf24" : "var(--c-card-text)",
+                    key={t.id}
+                    onClick={() => handleTableTap(t)}
+                    onContextMenu={(e) => { e.preventDefault(); handleEmptyTableLongPress(t); }}
+                    onTouchStart={(e) => {
+                      const timer = setTimeout(() => handleEmptyTableLongPress(t), 500);
+                      const el = e.currentTarget;
+                      const cancel = () => { clearTimeout(timer); el.removeEventListener("touchend", cancel); el.removeEventListener("touchmove", cancel); };
+                      el.addEventListener("touchend", cancel, { once: true });
+                      el.addEventListener("touchmove", cancel, { once: true });
                     }}
-                    onClick={(e) => { e.stopPropagation(); void submitBillRequest(t); }}
-                    aria-label="Αίτημα λογαριασμού"
+                    className={`relative flex flex-col items-center justify-center gap-1 rounded-3xl border-2 min-h-[96px] px-2 py-4 transition-transform active:scale-90 duration-100 ${
+                      (rsrvAssignMode || wlAssignMode) && !isOccupied ? "ring-2 ring-blue-400/60" : ""
+                    }`}
+                    style={{
+                      background: st.bg,
+                      borderColor: tblLate ? "#ef4444" : st.border,
+                      boxShadow: tblLate ? "0 0 12px rgba(239,68,68,0.5)" : "var(--c-card-shadow)",
+                      animation: tblLate ? "pulse 1.5s ease-in-out infinite" : undefined,
+                    }}
                   >
-                    💳
+                    {/* Status dot */}
+                    {!isOccupied && (
+                      <span
+                        className={`absolute top-2.5 right-2.5 h-2.5 w-2.5 rounded-full ${st.dotCls}`}
+                        style={{ background: st.dot }}
+                      />
+                    )}
+                    {!minOk && (
+                      <span className="absolute top-2 left-2 text-xs text-amber-400 leading-none">{"\u26A0"}</span>
+                    )}
+
+                    {/* Move button */}
+                    {isOccupied && !isPendingMove && (
+                      <button
+                        className="absolute top-1.5 left-1.5 w-9 h-9 rounded-xl flex items-center justify-center text-base font-bold transition-transform active:scale-90"
+                        style={{ background: "rgba(245,158,11,0.25)", color: "#fbbf24" }}
+                        onClick={(e) => { e.stopPropagation(); setMoveReqSource(t); }}
+                      >
+                        {"\u21C4"}
+                      </button>
+                    )}
+
+                    {/* Bill request button */}
+                    {isOccupied && !isPendingMove && !isBillFlash && (
+                      <button
+                        className="absolute top-1.5 right-1.5 w-9 h-9 rounded-xl flex items-center justify-center text-base transition-transform active:scale-90"
+                        style={{
+                          background: isPendingBill ? "rgba(245,158,11,0.35)" : "rgba(255,255,255,0.12)",
+                          color: isPendingBill ? "#fbbf24" : "var(--c-card-text)",
+                        }}
+                        onClick={(e) => { e.stopPropagation(); void submitBillRequest(t); }}
+                        aria-label="\u0391\u03AF\u03C4\u03B7\u03BC\u03B1 \u03BB\u03BF\u03B3\u03B1\u03C1\u03B9\u03B1\u03C3\u03BC\u03BF\u03CD"
+                      >
+                        {"\uD83D\uDCB3"}
+                      </button>
+                    )}
+
+                    {/* Bill pending badge */}
+                    {isPendingBill && !isBillFlash && (
+                      <span className="absolute bottom-1.5 right-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none"
+                        style={{ background: "rgba(245,158,11,0.3)", color: "#fbbf24" }}>
+                        {"\u0396\u03B7\u03C4\u03AE\u03B8\u03B7\u03BA\u03B5"}
+                      </span>
+                    )}
+
+                    {/* Bill flash feedback */}
+                    {isBillFlash && billFlash && (
+                      <div className={`absolute inset-0 rounded-3xl flex flex-col items-center justify-center ${billFlash.type === "processed" ? "bg-green-900/70" : "bg-zinc-800/80"}`}>
+                        <span className="text-lg leading-none">{billFlash.type === "processed" ? "\u2713" : "\u2715"}</span>
+                        <span className="text-xs font-semibold mt-1" style={{ color: billFlash.type === "processed" ? "#86efac" : "#a1a1aa" }}>
+                          {billFlash.type === "processed" ? "\u0395\u03BE\u03BF\u03C6\u03BB\u03AE\u03B8\u03B7\u03BA\u03B5" : "\u0391\u03BA\u03C5\u03C1\u03CE\u03B8\u03B7\u03BA\u03B5"}
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Kitchen status badge */}
+                    {kitchenSt && !isPendingMove && !isBillFlash && (
+                      <span
+                        className="absolute bottom-1.5 left-1.5 text-sm leading-none"
+                        title={kitchenSt === "done" ? "\u0388\u03C4\u03BF\u03B9\u03BC\u03BF" : "\u03A3\u03C4\u03B7\u03BD \u03BA\u03BF\u03C5\u03B6\u03AF\u03BD\u03B1"}
+                      >
+                        {kitchenSt === "done" ? "\u2705" : "\uD83C\uDF73"}
+                      </span>
+                    )}
+
+                    {/* VIP crown on table */}
+                    {tblRsrv?.source === "vip" && (
+                      <span className="absolute top-1 left-1/2 -translate-x-1/2 text-xs leading-none">{"\uD83D\uDC51"}</span>
+                    )}
+
+                    <span className="text-2xl font-black leading-none" style={{ color: "var(--c-card-text)" }}>
+                      {t.name}
+                    </span>
+
+                    {/* Reservation customer name on table card */}
+                    {tblRsrv && !isOccupied && (
+                      <span
+                        className="text-[10px] leading-none max-w-[80px] truncate font-semibold"
+                        style={{ color: tblLate ? "#f87171" : "#60a5fa" }}
+                      >
+                        {lastName(tblRsrv.customer_name)} {tblRsrv.reservation_time.slice(0, 5)}
+                      </span>
+                    )}
+
+                    {isOccupied && t.seated_customer_name && (
+                      <span
+                        className="text-xs leading-none max-w-[80px] truncate"
+                        style={{ color: "var(--c-text2)" }}
+                      >
+                        {"\uD83D\uDC64 "}
+                        {t.seated_customer_name.length > 16
+                          ? t.seated_customer_name.slice(0, 16) + "\u2026"
+                          : t.seated_customer_name}
+                        {t.seated_covers ? ` \u00B7 ${t.seated_covers}p` : ""}
+                      </span>
+                    )}
+                    {total !== undefined && (
+                      <span
+                        className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
+                        style={{ background: "rgba(0,0,0,0.25)", color: "var(--c-card-text)" }}
+                      >
+                        {total.toFixed(2)}\u20AC
+                      </span>
+                    )}
+                    {/* Allergy / dietary badges */}
+                    {((t.seated_allergies && t.seated_allergies.length > 0) || (t.seated_dietary && t.seated_dietary.length > 0)) && !isPendingMove && !isBillFlash && (
+                      <span className="absolute bottom-1.5 left-8 flex items-center gap-1">
+                        {t.seated_allergies && t.seated_allergies.length > 0 && (
+                          <span
+                            className="rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none"
+                            style={{ background: "rgba(239,68,68,0.25)", color: "#fca5a5" }}
+                          >
+                            {"\u26A0 "}{t.seated_allergies.length}
+                          </span>
+                        )}
+                        {t.seated_dietary && t.seated_dietary.length > 0 && (
+                          <span
+                            className="rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none"
+                            style={{ background: "rgba(16,185,129,0.2)", color: "#6ee7b7" }}
+                          >
+                            {"\uD83C\uDF31"}
+                          </span>
+                        )}
+                      </span>
+                    )}
+
+                    {/* Pending move overlay */}
+                    {isPendingMove && (
+                      <div className="absolute inset-0 bg-amber-900/70 rounded-3xl flex flex-col items-center justify-center">
+                        <span className="text-2xl leading-none">{"\u23F3"}</span>
+                        <span className="text-xs font-semibold mt-1" style={{ color: "#fcd34d" }}>{"\u0391\u03BD\u03B1\u03BC\u03AD\u03BD\u03B5\u03C4\u03B1\u03B9..."}</span>
+                      </div>
+                    )}
+
+                    {/* Denied overlay */}
+                    {isDenied && (
+                      <div className="absolute inset-0 bg-red-900/70 rounded-3xl flex flex-col items-center justify-center">
+                        <span className="text-sm font-bold" style={{ color: "#fca5a5" }}>{"\u2717 \u0391\u03C0\u03BF\u03C1\u03C1\u03AF\u03C6\u03B8\u03B7\u03BA\u03B5"}</span>
+                      </div>
+                    )}
                   </button>
-                )}
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
 
-                {/* Bill pending badge */}
-                {isPendingBill && !isBillFlash && (
-                  <span className="absolute bottom-1.5 right-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none"
-                    style={{ background: "rgba(245,158,11,0.3)", color: "#fbbf24" }}>
-                    Ζητήθηκε
-                  </span>
-                )}
-
-                {/* Bill flash feedback */}
-                {isBillFlash && billFlash && (
-                  <div className={`absolute inset-0 rounded-3xl flex flex-col items-center justify-center ${billFlash.type === "processed" ? "bg-green-900/70" : "bg-zinc-800/80"}`}>
-                    <span className="text-lg leading-none">{billFlash.type === "processed" ? "✓" : "✕"}</span>
-                    <span className="text-xs font-semibold mt-1" style={{ color: billFlash.type === "processed" ? "#86efac" : "#a1a1aa" }}>
-                      {billFlash.type === "processed" ? "Εξοφλήθηκε" : "Ακυρώθηκε"}
+      {/* ============ RESERVATIONS TAB ============ */}
+      {pageTab === "reservations" && (
+        <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(80px+env(safe-area-inset-bottom))]">
+          {rsrvLoading && reservations.length === 0 && (
+            <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u03A6\u03CC\u03C1\u03C4\u03C9\u03C3\u03B7..."}</p>
+          )}
+          {!rsrvLoading && reservations.length === 0 && (
+            <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u0394\u03B5\u03BD \u03C5\u03C0\u03AC\u03C1\u03C7\u03BF\u03C5\u03BD \u03BA\u03C1\u03B1\u03C4\u03AE\u03C3\u03B5\u03B9\u03C2 \u03C3\u03AE\u03BC\u03B5\u03C1\u03B1"}</p>
+          )}
+          <div className="flex flex-col gap-2">
+            {reservations.map((r) => {
+              const sc = RSRV_STATUS_COLOR[r.status] ?? RSRV_STATUS_COLOR.completed;
+              const statusLabel: Record<string, string> = {
+                pending: "\u0395\u03BA\u03BA\u03C1\u03B5\u03BC\u03AE\u03C2",
+                confirmed: "\u0395\u03C0\u03B9\u03B2\u03B5\u03B2\u03B1\u03B9\u03C9\u03BC\u03AD\u03BD\u03B7",
+                seated: "\u039A\u03AC\u03B8\u03B9\u03C3\u03B5",
+                completed: "\u039F\u03BB\u03BF\u03BA\u03BB\u03B7\u03C1\u03CE\u03B8\u03B7\u03BA\u03B5",
+                cancelled: "\u0391\u03BA\u03C5\u03C1\u03CE\u03B8\u03B7\u03BA\u03B5",
+                no_show: "No-show",
+              };
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => setSelectedRsrv(r)}
+                  className="flex items-center justify-between rounded-2xl border px-4 py-3 min-h-[68px] transition-transform active:scale-[0.98]"
+                  style={{ background: "var(--c-surface)", borderColor: "var(--c-border)" }}
+                >
+                  <div className="flex flex-col items-start gap-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      {r.source === "vip" && <span className="text-sm leading-none">{"\uD83D\uDC51"}</span>}
+                      <span className="font-bold text-sm truncate" style={{ color: "var(--c-text)" }}>
+                        {r.customer_name}
+                      </span>
+                      <span className="text-xs font-semibold" style={{ color: "var(--c-text2)" }}>
+                        {r.party_size} {"\u03AC\u03C4."}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {r.customer_phone && (
+                        <span className="text-xs" style={{ color: "var(--c-text3)" }}>{r.customer_phone}</span>
+                      )}
+                      {r.source && r.source !== "vip" && (
+                        <span className="text-xs" style={{ color: "var(--c-text3)" }}>
+                          {SOURCE_EMOJI[r.source] ?? r.source}
+                        </span>
+                      )}
+                      {r.table_name && (
+                        <span className="text-xs font-semibold" style={{ color: "#60a5fa" }}>
+                          {"\u03A4\u03C1. "}{r.table_name}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
+                    <span className="text-sm font-bold" style={{ color: "var(--c-text)" }}>
+                      {r.reservation_time.slice(0, 5)}
+                    </span>
+                    <span
+                      className="rounded-full px-2.5 py-0.5 text-[10px] font-bold"
+                      style={{ background: sc.bg, color: sc.text }}
+                    >
+                      {statusLabel[r.status] ?? r.status}
                     </span>
                   </div>
-                )}
-
-                {/* Kitchen status badge */}
-                {kitchenSt && !isPendingMove && !isBillFlash && (
-                  <span
-                    className="absolute bottom-1.5 left-1.5 text-sm leading-none"
-                    title={kitchenSt === "done" ? "Έτοιμο" : "Στην κουζίνα"}
-                  >
-                    {kitchenSt === "done" ? "✅" : "🍳"}
-                  </span>
-                )}
-
-                <span className="text-2xl font-black leading-none" style={{ color: "var(--c-card-text)" }}>
-                  {t.name}
-                </span>
-                {isOccupied && t.seated_customer_name && (
-                  <span
-                    className="text-xs leading-none max-w-[80px] truncate"
-                    style={{ color: "var(--c-text2)" }}
-                  >
-                    {"👤 "}
-                    {t.seated_customer_name.length > 16
-                      ? t.seated_customer_name.slice(0, 16) + "…"
-                      : t.seated_customer_name}
-                    {t.seated_covers ? ` · ${t.seated_covers}p` : ""}
-                  </span>
-                )}
-                {total !== undefined && (
-                  <span
-                    className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-                    style={{ background: "rgba(0,0,0,0.25)", color: "var(--c-card-text)" }}
-                  >
-                    {total.toFixed(2)}€
-                  </span>
-                )}
-                {/* Allergy / dietary badges — bottom-left, above kitchen badge */}
-                {((t.seated_allergies && t.seated_allergies.length > 0) || (t.seated_dietary && t.seated_dietary.length > 0)) && !isPendingMove && !isBillFlash && (
-                  <span
-                    className="absolute bottom-1.5 left-8 flex items-center gap-1"
-                  >
-                    {t.seated_allergies && t.seated_allergies.length > 0 && (
-                      <span
-                        className="rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none"
-                        style={{ background: "rgba(239,68,68,0.25)", color: "#fca5a5" }}
-                      >
-                        {"⚠ "}{t.seated_allergies.length}
-                      </span>
-                    )}
-                    {t.seated_dietary && t.seated_dietary.length > 0 && (
-                      <span
-                        className="rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none"
-                        style={{ background: "rgba(16,185,129,0.2)", color: "#6ee7b7" }}
-                      >
-                        {"🌱"}
-                      </span>
-                    )}
-                  </span>
-                )}
-
-                {/* Pending move overlay */}
-                {isPendingMove && (
-                  <div className="absolute inset-0 bg-amber-900/70 rounded-3xl flex flex-col items-center justify-center">
-                    <span className="text-2xl leading-none">⏳</span>
-                    <span className="text-xs font-semibold mt-1" style={{ color: "#fcd34d" }}>Αναμένεται...</span>
-                  </div>
-                )}
-
-                {/* Denied overlay */}
-                {isDenied && (
-                  <div className="absolute inset-0 bg-red-900/70 rounded-3xl flex flex-col items-center justify-center">
-                    <span className="text-sm font-bold" style={{ color: "#fca5a5" }}>✗ Απορρίφθηκε</span>
-                  </div>
-                )}
-              </button>
-            );
-          })}
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ============ WAITLIST TAB ============ */}
+      {pageTab === "waitlist" && (
+        <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(80px+env(safe-area-inset-bottom))]">
+          {waitLoading && waitlist.length === 0 && (
+            <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u03A6\u03CC\u03C1\u03C4\u03C9\u03C3\u03B7..."}</p>
+          )}
+          {!waitLoading && waitlist.length === 0 && (
+            <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u039A\u03B5\u03BD\u03AE \u03BB\u03AF\u03C3\u03C4\u03B1 \u03B1\u03BD\u03B1\u03BC\u03BF\u03BD\u03AE\u03C2"}</p>
+          )}
+          <div className="flex flex-col gap-2">
+            {waitlist.map((w) => (
+              <button
+                key={w.id}
+                onClick={() => { setSelectedWl(w); setWlAssignMode(true); setPageTab("tables"); }}
+                className="flex items-center justify-between rounded-2xl border px-4 py-3 min-h-[68px] transition-transform active:scale-[0.98]"
+                style={{ background: "var(--c-surface)", borderColor: "var(--c-border)" }}
+              >
+                <div className="flex flex-col items-start gap-1">
+                  <span className="font-bold text-sm" style={{ color: "var(--c-text)" }}>{w.party_name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs" style={{ color: "var(--c-text2)" }}>{w.party_size} {"\u03AC\u03C4."}</span>
+                    {w.phone && <span className="text-xs" style={{ color: "var(--c-text3)" }}>{w.phone}</span>}
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <span className="text-xs font-semibold" style={{ color: "#fbbf24" }}>
+                    {minutesAgo(w.created_at)} {"\u03BB\u03B5\u03C0\u03C4\u03AC"}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+          {/* Add to waitlist button */}
+          <button
+            onClick={() => setShowAddWaitlist(true)}
+            className="fixed right-5 bottom-[calc(80px+env(safe-area-inset-bottom)+16px)] z-40 w-[60px] h-[60px] rounded-full flex items-center justify-center text-2xl font-bold transition-transform active:scale-90"
+            style={{ background: "#3b82f6", color: "#fff", boxShadow: "0 4px 20px rgba(59,130,246,0.4)" }}
+          >
+            +
+          </button>
+        </div>
+      )}
+
+      {/* ============ RESERVATION ACTION SHEET ============ */}
+      {selectedRsrv && !rsrvAssignMode && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60"
+          onClick={() => setSelectedRsrv(null)}
+        >
+          <div
+            className="fixed bottom-0 left-0 right-0 rounded-t-3xl overflow-y-auto"
+            style={{ background: "var(--c-header)", maxHeight: "80vh" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* drag handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full" style={{ background: "var(--c-border)" }} />
+            </div>
+            {/* header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "var(--c-border)" }}>
+              <div>
+                <p className="font-bold text-base" style={{ color: "var(--c-text)" }}>
+                  {selectedRsrv.source === "vip" && "\uD83D\uDC51 "}{selectedRsrv.customer_name}
+                </p>
+                <p className="text-sm" style={{ color: "var(--c-text2)" }}>
+                  {selectedRsrv.party_size} {"\u03AC\u03C4\u03BF\u03BC\u03B1"} {"\u00B7"} {selectedRsrv.reservation_time.slice(0, 5)}
+                </p>
+              </div>
+              <button
+                className="w-10 h-10 flex items-center justify-center rounded-xl transition-opacity active:opacity-50"
+                style={{ color: "var(--c-text2)" }}
+                onClick={() => setSelectedRsrv(null)}
+              >{"\u2715"}</button>
+            </div>
+            {/* Info box */}
+            <div className="px-4 py-3 flex flex-col gap-2">
+              {selectedRsrv.customer_phone && (
+                <div className="flex items-center gap-2">
+                  <span className="text-sm" style={{ color: "var(--c-text3)" }}>{"\uD83D\uDCDE"}</span>
+                  <a href={`tel:${selectedRsrv.customer_phone}`} className="text-sm font-medium" style={{ color: "#60a5fa" }}>
+                    {selectedRsrv.customer_phone}
+                  </a>
+                </div>
+              )}
+              {selectedRsrv.dietary_notes && (
+                <div className="rounded-xl px-3 py-2" style={{ background: "rgba(16,185,129,0.1)" }}>
+                  <span className="text-xs font-semibold" style={{ color: "#6ee7b7" }}>{"\uD83C\uDF31 "}{selectedRsrv.dietary_notes}</span>
+                </div>
+              )}
+              {selectedRsrv.staff_notes && (
+                <div className="rounded-xl px-3 py-2" style={{ background: "rgba(245,158,11,0.1)" }}>
+                  <span className="text-xs font-semibold" style={{ color: "#fbbf24" }}>{"\uD83D\uDCDD "}{selectedRsrv.staff_notes}</span>
+                </div>
+              )}
+              {selectedRsrv.has_children && (
+                <div className="rounded-xl px-3 py-2" style={{ background: "rgba(59,130,246,0.1)" }}>
+                  <span className="text-xs font-semibold" style={{ color: "#60a5fa" }}>{"\uD83D\uDC76 \u039C\u03B5 \u03C0\u03B1\u03B9\u03B4\u03B9\u03AC"}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-2">
+                <span className="text-xs" style={{ color: "var(--c-text3)" }}>
+                  {"\u0391\u03BD\u03B1\u03BC\u03B5\u03BD\u03CC\u03BC\u03B5\u03BD\u03B7 \u03B1\u03C0\u03BF\u03C7\u03CE\u03C1\u03B7\u03C3\u03B7: ~"}{(() => {
+                    const [h, m] = selectedRsrv.reservation_time.split(":").map(Number);
+                    const dep = new Date();
+                    dep.setHours(h + 4, m, 0, 0);
+                    return dep.toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit" });
+                  })()}
+                </span>
+              </div>
+              {selectedRsrv.table_name && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold" style={{ color: "#60a5fa" }}>{"\u03A4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9: "}{selectedRsrv.table_name}</span>
+                </div>
+              )}
+            </div>
+            {/* Action buttons */}
+            <div className="px-4 pb-[calc(24px+env(safe-area-inset-bottom))] flex flex-col gap-2">
+              {(selectedRsrv.status === "confirmed" || selectedRsrv.status === "pending") && (
+                <button
+                  onClick={() => void patchRsrvStatus(selectedRsrv.id, "seated")}
+                  className="w-full min-h-[60px] rounded-2xl flex items-center justify-center gap-2 text-base font-bold transition-transform active:scale-95"
+                  style={{ background: "rgba(34,197,94,0.2)", color: "#4ade80" }}
+                >
+                  {"\uD83D\uDFE2 \u0386\u03C6\u03B9\u03BE\u03B7"}
+                </button>
+              )}
+              {(selectedRsrv.status === "confirmed" || selectedRsrv.status === "pending") && (
+                <button
+                  onClick={() => { setRsrvAssignMode(true); setPageTab("tables"); }}
+                  className="w-full min-h-[60px] rounded-2xl flex items-center justify-center gap-2 text-base font-bold transition-transform active:scale-95"
+                  style={{ background: "rgba(59,130,246,0.2)", color: "#60a5fa" }}
+                >
+                  {"\uD83D\uDD35 \u0391\u03BD\u03AC\u03B8\u03B5\u03C3\u03B7 \u03C4\u03C1\u03B1\u03C0\u03B5\u03B6\u03B9\u03BF\u03CD"}
+                </button>
+              )}
+              {selectedRsrv.status === "seated" && (
+                <button
+                  onClick={() => void patchRsrvStatus(selectedRsrv.id, "completed")}
+                  className="w-full min-h-[60px] rounded-2xl flex items-center justify-center gap-2 text-base font-bold transition-transform active:scale-95"
+                  style={{ background: "rgba(245,158,11,0.2)", color: "#fbbf24" }}
+                >
+                  {"\uD83D\uDFE1 \u0391\u03C0\u03BF\u03C7\u03CE\u03C1\u03B7\u03C3\u03B5"}
+                </button>
+              )}
+              {selectedRsrv.status !== "cancelled" && selectedRsrv.status !== "completed" && (
+                <button
+                  onClick={() => void patchRsrvStatus(selectedRsrv.id, "cancelled")}
+                  className="w-full min-h-[60px] rounded-2xl flex items-center justify-center gap-2 text-base font-bold transition-transform active:scale-95"
+                  style={{ background: "rgba(239,68,68,0.2)", color: "#f87171" }}
+                >
+                  {"\uD83D\uDD34 \u0391\u03BA\u03CD\u03C1\u03C9\u03C3\u03B7"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============ WALK-IN BOTTOM SHEET ============ */}
+      {walkInTable && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60"
+          onClick={() => setWalkInTable(null)}
+        >
+          <div
+            className="fixed bottom-0 left-0 right-0 rounded-t-3xl overflow-y-auto"
+            style={{ background: "var(--c-header)", maxHeight: "85vh" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* drag handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full" style={{ background: "var(--c-border)" }} />
+            </div>
+            {/* header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "var(--c-border)" }}>
+              <p className="font-bold text-base" style={{ color: "var(--c-text)" }}>
+                {"\u0386\u03BD\u03BF\u03B9\u03B3\u03BC\u03B1 \u03C4\u03C1\u03B1\u03C0\u03B5\u03B6\u03B9\u03BF\u03CD "}{walkInTable.name}
+              </p>
+              <button
+                className="w-10 h-10 flex items-center justify-center rounded-xl transition-opacity active:opacity-50"
+                style={{ color: "var(--c-text2)" }}
+                onClick={() => setWalkInTable(null)}
+              >{"\u2715"}</button>
+            </div>
+            <div className="px-4 py-4 flex flex-col gap-4">
+              {/* Party size stepper */}
+              <div>
+                <label className="text-xs font-semibold mb-1.5 block" style={{ color: "var(--c-text2)" }}>{"\u0386\u03C4\u03BF\u03BC\u03B1"}</label>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={() => setWiSize(Math.max(1, wiSize - 1))}
+                    className="w-[60px] h-[60px] rounded-2xl flex items-center justify-center text-2xl font-bold transition-transform active:scale-90"
+                    style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
+                  >{"\u2212"}</button>
+                  <span className="text-3xl font-black w-12 text-center" style={{ color: "var(--c-text)" }}>{wiSize}</span>
+                  <button
+                    onClick={() => setWiSize(wiSize + 1)}
+                    className="w-[60px] h-[60px] rounded-2xl flex items-center justify-center text-2xl font-bold transition-transform active:scale-90"
+                    style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
+                  >+</button>
+                </div>
+              </div>
+              {/* Name */}
+              <div>
+                <label className="text-xs font-semibold mb-1.5 block" style={{ color: "var(--c-text2)" }}>{"\u038C\u03BD\u03BF\u03BC\u03B1"}</label>
+                <input
+                  type="text"
+                  value={wiName}
+                  onChange={(e) => setWiName(e.target.value)}
+                  placeholder="Walk-in"
+                  className="w-full rounded-2xl px-4 py-3 text-base font-semibold outline-none"
+                  style={{ background: "var(--c-surface2)", color: "var(--c-text)", border: "1.5px solid var(--c-border)" }}
+                />
+              </div>
+              {/* Phone */}
+              <div>
+                <label className="text-xs font-semibold mb-1.5 block" style={{ color: "var(--c-text2)" }}>{"\u03A4\u03B7\u03BB\u03AD\u03C6\u03C9\u03BD\u03BF"}</label>
+                <input
+                  type="tel"
+                  value={wiPhone}
+                  onChange={(e) => setWiPhone(e.target.value)}
+                  placeholder="\u03A0\u03C1\u03BF\u03B1\u03B9\u03C1\u03B5\u03C4\u03B9\u03BA\u03CC"
+                  className="w-full rounded-2xl px-4 py-3 text-base font-semibold outline-none"
+                  style={{ background: "var(--c-surface2)", color: "var(--c-text)", border: "1.5px solid var(--c-border)" }}
+                />
+              </div>
+              {/* Sitting time pills */}
+              <div>
+                <label className="text-xs font-semibold mb-1.5 block" style={{ color: "var(--c-text2)" }}>{"\u03A7\u03C1\u03CC\u03BD\u03BF\u03C2 \u03BA\u03B1\u03B8\u03AF\u03C3\u03BC\u03B1\u03C4\u03BF\u03C2"}</label>
+                <div className="flex gap-2 flex-wrap">
+                  {SITTING_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.label}
+                      onClick={() => setWiSitting(opt.minutes)}
+                      className={`rounded-full px-4 h-10 text-sm font-semibold transition-colors ${
+                        wiSitting === opt.minutes ? "bg-brand text-white" : "active:opacity-70"
+                      }`}
+                      style={wiSitting !== opt.minutes ? { background: "var(--c-surface2)", color: "var(--c-text2)" } : {}}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Source selector */}
+              <div>
+                <label className="text-xs font-semibold mb-1.5 block" style={{ color: "var(--c-text2)" }}>{"\u03A0\u03B7\u03B3\u03AE"}</label>
+                <div className="flex gap-2 overflow-x-auto">
+                  {WALK_IN_SOURCES.map((s) => (
+                    <button
+                      key={s.key}
+                      onClick={() => setWiSource(s.key)}
+                      className={`shrink-0 rounded-full px-4 h-10 text-sm font-semibold transition-colors flex items-center gap-1.5 ${
+                        wiSource === s.key ? "bg-brand text-white" : "active:opacity-70"
+                      }`}
+                      style={wiSource !== s.key ? { background: "var(--c-surface2)", color: "var(--c-text2)" } : {}}
+                    >
+                      <span>{s.emoji}</span>
+                      <span>{s.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Submit button */}
+              <button
+                onClick={() => void submitWalkIn()}
+                disabled={wiSubmitting}
+                className="w-full min-h-[60px] rounded-2xl flex items-center justify-center gap-2 text-base font-bold transition-transform active:scale-95"
+                style={{ background: wiSubmitting ? "rgba(34,197,94,0.1)" : "rgba(34,197,94,0.25)", color: "#4ade80" }}
+              >
+                {wiSubmitting ? "\u0391\u03BD\u03B1\u03BC\u03BF\u03BD\u03AE..." : "\u0386\u03BD\u03BF\u03B9\u03B3\u03BC\u03B1"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============ ADD TO WAITLIST SHEET ============ */}
+      {showAddWaitlist && (
+        <div
+          className="fixed inset-0 z-50 bg-black/60"
+          onClick={() => setShowAddWaitlist(false)}
+        >
+          <div
+            className="fixed bottom-0 left-0 right-0 rounded-t-3xl overflow-y-auto"
+            style={{ background: "var(--c-header)", maxHeight: "70vh" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* drag handle */}
+            <div className="flex justify-center pt-3 pb-1">
+              <div className="w-10 h-1 rounded-full" style={{ background: "var(--c-border)" }} />
+            </div>
+            {/* header */}
+            <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "var(--c-border)" }}>
+              <p className="font-bold text-base" style={{ color: "var(--c-text)" }}>{"\u03A0\u03C1\u03BF\u03C3\u03B8\u03AE\u03BA\u03B7 \u03C3\u03C4\u03B7\u03BD \u03B1\u03BD\u03B1\u03BC\u03BF\u03BD\u03AE"}</p>
+              <button
+                className="w-10 h-10 flex items-center justify-center rounded-xl transition-opacity active:opacity-50"
+                style={{ color: "var(--c-text2)" }}
+                onClick={() => setShowAddWaitlist(false)}
+              >{"\u2715"}</button>
+            </div>
+            <div className="px-4 py-4 flex flex-col gap-4">
+              {/* Name */}
+              <input
+                type="text"
+                value={wlName}
+                onChange={(e) => setWlName(e.target.value)}
+                placeholder={"\u038C\u03BD\u03BF\u03BC\u03B1 *"}
+                className="w-full rounded-2xl px-4 py-3 text-base font-semibold outline-none"
+                style={{ background: "var(--c-surface2)", color: "var(--c-text)", border: "1.5px solid var(--c-border)" }}
+              />
+              {/* Party size stepper */}
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setWlSize(Math.max(1, wlSize - 1))}
+                  className="w-[60px] h-[60px] rounded-2xl flex items-center justify-center text-2xl font-bold transition-transform active:scale-90"
+                  style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
+                >{"\u2212"}</button>
+                <span className="text-3xl font-black w-12 text-center" style={{ color: "var(--c-text)" }}>{wlSize}</span>
+                <button
+                  onClick={() => setWlSize(wlSize + 1)}
+                  className="w-[60px] h-[60px] rounded-2xl flex items-center justify-center text-2xl font-bold transition-transform active:scale-90"
+                  style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
+                >+</button>
+              </div>
+              {/* Phone */}
+              <input
+                type="tel"
+                value={wlPhone}
+                onChange={(e) => setWlPhone(e.target.value)}
+                placeholder={"\u03A4\u03B7\u03BB\u03AD\u03C6\u03C9\u03BD\u03BF (\u03C0\u03C1\u03BF\u03B1\u03B9\u03C1\u03B5\u03C4\u03B9\u03BA\u03CC)"}
+                className="w-full rounded-2xl px-4 py-3 text-base font-semibold outline-none"
+                style={{ background: "var(--c-surface2)", color: "var(--c-text)", border: "1.5px solid var(--c-border)" }}
+              />
+              {/* Submit */}
+              <button
+                onClick={() => void addToWaitlist()}
+                disabled={!wlName.trim()}
+                className="w-full min-h-[60px] rounded-2xl flex items-center justify-center gap-2 text-base font-bold transition-transform active:scale-95"
+                style={{
+                  background: wlName.trim() ? "rgba(59,130,246,0.25)" : "rgba(59,130,246,0.1)",
+                  color: wlName.trim() ? "#60a5fa" : "rgba(96,165,250,0.4)",
+                }}
+              >
+                {"\u03A0\u03C1\u03BF\u03C3\u03B8\u03AE\u03BA\u03B7"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Move destination bottom sheet */}
       {moveReqSource && (
@@ -612,15 +1389,15 @@ export default function TablesPage() {
             {/* header */}
             <div className="flex items-center justify-between px-4 py-3 border-b" style={{ borderColor: "var(--c-border)" }}>
               <p className="font-bold text-base" style={{ color: "var(--c-text)" }}>
-                Μεταφορά από {moveReqSource.name}
+                {"\u039C\u03B5\u03C4\u03B1\u03C6\u03BF\u03C1\u03AC \u03B1\u03C0\u03CC "}{moveReqSource.name}
               </p>
               <button
                 className="w-10 h-10 flex items-center justify-center rounded-xl transition-opacity active:opacity-50"
                 style={{ color: "var(--c-text2)" }}
                 onClick={() => setMoveReqSource(null)}
-              >✕</button>
+              >{"\u2715"}</button>
             </div>
-            {/* table grid — exclude source table, show all other active tables */}
+            {/* table grid */}
             <div className="p-4 grid grid-cols-3 gap-3 sm:grid-cols-4 pb-[calc(32px+env(safe-area-inset-bottom))]">
               {tables
                 .filter(t => t.id !== moveReqSource.id && t.is_active)
@@ -641,11 +1418,11 @@ export default function TablesPage() {
                       </span>
                       {orderTotals[t.id] !== undefined && (
                         <span className="text-[10px] font-semibold rounded-full px-2 py-0.5" style={{ background: "rgba(0,0,0,0.25)", color: "var(--c-card-text)" }}>
-                          {orderTotals[t.id].toFixed(2)}€
+                          {orderTotals[t.id].toFixed(2)}{"\u20AC"}
                         </span>
                       )}
                       <span className="text-[10px]" style={{ color: isFree ? "#4ADE80" : "#60A5FA" }}>
-                        {isFree ? "Ελεύθερο" : "Πιασμένο"}
+                        {isFree ? "\u0395\u03BB\u03B5\u03CD\u03B8\u03B5\u03C1\u03BF" : "\u03A0\u03B9\u03B1\u03C3\u03BC\u03AD\u03BD\u03BF"}
                       </span>
                     </button>
                   );

@@ -113,6 +113,38 @@ export function calcTotal(items: DbOrderItem[]): number {
 }
 
 // ---------------------------------------------------------------------------
+// RSRV reservation & waitlist types
+// ---------------------------------------------------------------------------
+
+export interface RsrvReservation {
+  id: string;
+  customer_name: string;
+  customer_phone: string | null;
+  party_size: number;
+  reservation_date: string;
+  reservation_time: string;
+  table_id: string | null;
+  table_name: string | null;
+  status: "pending" | "confirmed" | "seated" | "completed" | "cancelled" | "no_show";
+  source: string | null;
+  notes: string | null;
+  has_children: boolean;
+  dietary_notes: string | null;
+  staff_notes: string | null;
+  prepayment_status: string | null;
+  prepayment_amount_cents: number;
+}
+
+export interface WaitlistEntry {
+  id: string;
+  party_name: string;
+  party_size: number;
+  phone: string | null;
+  status: string;
+  created_at: string;
+}
+
+// ---------------------------------------------------------------------------
 // UnifiedDb interface — the shape both SQLite and Dexie adapters implement
 // ---------------------------------------------------------------------------
 

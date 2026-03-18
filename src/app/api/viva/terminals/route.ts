@@ -3,15 +3,18 @@ import { createClient } from "@supabase/supabase-js";
 
 export const runtime = "edge";
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-);
+function getAdmin() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  );
+}
 
 export async function GET(req: NextRequest) {
   const venueId = req.nextUrl.searchParams.get("venue_id");
   if (!venueId) return NextResponse.json({ error: "venue_id required" }, { status: 400 });
 
+  const supabaseAdmin = getAdmin();
   const { data, error } = await supabaseAdmin
     .from("venues")
     .select("viva_terminals, viva_merchant_id")
