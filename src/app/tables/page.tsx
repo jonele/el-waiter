@@ -242,7 +242,8 @@ export default function TablesPage() {
   useEffect(() => {
     if (!supabase || !waiter?.venue_id) return;
     const vid = waiter.venue_id;
-    const isHostess = waiter.role?.toLowerCase() === "hostess";
+    const role = waiter.role?.toLowerCase() || "";
+    const isHostess = role === "hostess" || role === "beach_hostess";
 
     const ch = supabase
       .channel(`tables-live-${vid}`)
@@ -479,11 +480,15 @@ export default function TablesPage() {
           staff_notes: wiSitting > 0 ? `Sitting: ${wiSitting}min` : null,
         }),
       });
-      // Navigate to order
-      useWaiterStore.getState().setActiveTable(walkInTable);
       setWalkInTable(null);
       setWiName(""); setWiPhone(""); setWiSize(2); setWiSitting(240); setWiSource("walk_in");
-      router.push("/order");
+      // Beach hostess stays on floor plan, waiters go to order page
+      if (!isBeachHostess) {
+        useWaiterStore.getState().setActiveTable(walkInTable);
+        router.push("/order");
+      }
+      // Refresh reservations to show the new walk-in
+      void fetchReservations();
     } catch { /* keep sheet open */ }
     setWiSubmitting(false);
   }
@@ -532,6 +537,11 @@ export default function TablesPage() {
     router.push("/order");
   }
 
+  const isBeachHostess = (() => {
+    const r = waiter?.role?.toLowerCase() || "";
+    return r === "beach_hostess" || r === "hostess";
+  })();
+
   function handleTableTap(t: DbTable) {
     // If in assignment mode for reservation
     if (rsrvAssignMode && selectedRsrv) {
@@ -543,7 +553,21 @@ export default function TablesPage() {
       void assignTableToWl(selectedWl, t);
       return;
     }
-    // Normal table tap
+    // Beach hostess: empty table → walk-in sheet, occupied → reservation action sheet
+    if (isBeachHostess) {
+      const isOccupied = t.status === "occupied" || orderTotals[t.id] !== undefined;
+      if (!isOccupied) {
+        setWalkInTable(t);
+      } else {
+        // Find matching reservation for this table and show action sheet
+        const matchedRsrv = reservations.find(r => r.table_id === t.id || r.table_name === t.name);
+        if (matchedRsrv) {
+          setSelectedRsrv(matchedRsrv);
+        }
+      }
+      return;
+    }
+    // Normal table tap → go to order page
     openTable(t);
   }
 

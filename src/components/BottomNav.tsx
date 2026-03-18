@@ -1,15 +1,20 @@
 "use client";
 import { usePathname, useRouter } from "next/navigation";
+import { useWaiterStore } from "@/store/waiterStore";
 
-const TABS = [
-  { href: "/tables",   label: "Τραπέζια",   icon: TablesIcon },
-  { href: "/wallet",   label: "Πορτοφόλι",  icon: WalletIcon },
-  { href: "/settings", label: "Ρυθμίσεις",  icon: SettingsIcon },
+const ALL_TABS = [
+  { href: "/tables",   label: "Τραπέζια",   icon: TablesIcon, hostess: true },
+  { href: "/wallet",   label: "Πορτοφόλι",  icon: WalletIcon, hostess: false },
+  { href: "/settings", label: "Ρυθμίσεις",  icon: SettingsIcon, hostess: true },
 ];
 
 export default function BottomNav() {
   const pathname = usePathname();
   const router = useRouter();
+  const waiter = useWaiterStore((s) => s.waiter);
+  const role = waiter?.role?.toLowerCase() || "";
+  const isBeachHostess = role === "beach_hostess" || role === "hostess";
+  const TABS = isBeachHostess ? ALL_TABS.filter((t) => t.hostess) : ALL_TABS;
 
   return (
     <nav
