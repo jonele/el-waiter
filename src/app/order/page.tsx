@@ -1,11 +1,27 @@
 "use client";
 import { useEffect, useState, useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { waiterDb, getOpenOrder, calcTotal } from "@/lib/waiterDb";
 import { useWaiterStore } from "@/store/waiterStore";
 import { supabase } from "@/lib/supabase";
 import { v4 as uuidv4 } from "uuid";
-import type { DbMenuCategory, DbMenuItem, DbOrderItem, DbOrder } from "@/lib/waiterDb";
+import type { DbMenuCategory, DbMenuItem, DbOrderItem, DbOrder, DbTable } from "@/lib/waiterDb";
+
+// Virtual table for takeaway orders
+const TAKEAWAY_TABLE: DbTable = {
+  id: "takeaway",
+  venue_id: "",
+  name: "TAKEAWAY",
+  floor_section_id: undefined,
+  capacity: 1,
+  status: "free",
+  sort_order: 0,
+  is_active: true,
+  seated_customer_name: undefined,
+  seated_covers: undefined,
+  seated_allergies: [],
+  seated_dietary: [],
+};
 
 // Upsell keyword detection
 const DRINK_KW   = ["ποτό","μπύρα","κρασί","drink","beer","wine","cocktail","ουίσκι","ούζο","τσίπουρο","νερό","χυμό","σόδα","καφέ","espresso"];
@@ -34,7 +50,8 @@ function groupBySeat(items: DbOrderItem[]): Map<number | null, DbOrderItem[]> {
 
 export default function OrderPage() {
   const router = useRouter();
-  const { waiter, activeTable, settings, isOnline } = useWaiterStore();
+  const searchParams = useSearchParams();
+  const { waiter, activeTable: storeTable, settings, isOnline } = useWaiterStore();
   const [categories, setCategories] = useState<DbMenuCategory[]>([]);
   const [items, setItems] = useState<DbMenuItem[]>([]);
   const [activeCategory, setActiveCategory] = useState<string>("");
@@ -47,13 +64,18 @@ export default function OrderPage() {
   const [tab, setTab] = useState<"menu" | "cart">("menu");
   const [activeSeat, setActiveSeat] = useState<number | null>(null);
 
+  // Check if this is a takeaway order
+  const isTakeaway = searchParams.get("takeaway") === "1";
+  const activeTable = isTakeaway ? { ...TAKEAWAY_TABLE, venue_id: waiter?.venue_id || "" } : storeTable;
+
   const capacity = activeTable?.capacity ?? 1;
-  const showSeatPicker = capacity >= 2;
+  const showSeatPicker = !isTakeaway && capacity >= 2;
 
   useEffect(() => {
-    if (!waiter || !activeTable) { router.replace("/tables"); return; }
+    if (!waiter) { router.replace("/tables"); return; }
+    if (!activeTable && !isTakeaway) { router.replace("/tables"); return; }
     loadData();
-  }, [waiter, activeTable]);
+  }, [waiter, activeTable, isTakeaway]);
 
   async function loadData() {
     const [cats, existingOrder] = await Promise.all([

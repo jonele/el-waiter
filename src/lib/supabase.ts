@@ -1,5 +1,20 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
+/**
+ * Decode Unicode escape sequences in a string.
+ * Handles cases where text is stored with escaped Unicode like \u0391\u03C1...
+ */
+export function decodeUnicodeEscapes(str: string): string {
+  if (typeof str !== 'string') return str;
+  // Check if string contains Unicode escapes like \u0391
+  if (!/\\u[0-9a-fA-F]{4}/.test(str)) return str;
+  try {
+    return JSON.parse(`"${str.replace(/"/g, '\\"')}"`);
+  } catch {
+    return str;
+  }
+}
+
 const url  = process.env.NEXT_PUBLIC_SUPABASE_URL  || "";
 const key  = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
 

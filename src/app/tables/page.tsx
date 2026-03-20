@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { waiterDb } from "@/lib/waiterDb";
 import { useWaiterStore } from "@/store/waiterStore";
-import { supabase } from "@/lib/supabase";
+import { supabase, decodeUnicodeEscapes } from "@/lib/supabase";
 import BottomNav from "@/components/BottomNav";
 import { registerPushNotifications } from "@/lib/pushNotifications";
 import { pullVenueConfig } from "@/lib/venueConfig";
@@ -621,19 +621,20 @@ export default function TablesPage() {
         style={{ background: "var(--c-header)", borderColor: "var(--c-border)" }}
       >
         <div className="flex items-center gap-3">
-          <div
-            className="w-10 h-10 rounded-full flex items-center justify-center text-2xl shrink-0"
-            style={{ background: "var(--c-surface2)" }}
-          >
-            {waiter?.icon || "\uD83D\uDC64"}
-          </div>
-          <div className="flex flex-col leading-tight">
-            <span className="font-semibold text-sm" style={{ color: "var(--c-text)" }}>{waiter?.name}</span>
-            <div className="flex items-center gap-1.5">
+          <div className="flex flex-col">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-base" style={{ color: "var(--brand, #3B82F6)" }}>EL-Waiter</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.0.1</span>
+            </div>
+            <div className="flex items-center gap-2 mt-0.5">
+              <div
+                className="w-6 h-6 rounded-full flex items-center justify-center text-sm shrink-0"
+                style={{ background: "var(--c-surface2)" }}
+              >
+                {waiter?.icon || "👤"}
+              </div>
+              <span className="text-xs" style={{ color: "var(--c-text2)" }}>{waiter?.name}</span>
               <span className={`h-1.5 w-1.5 rounded-full ${isOnline ? "bg-green-400 animate-pulse" : "bg-red-500"}`} />
-              <span className="text-[10px]" style={{ color: "var(--c-text2)" }}>
-                {isOnline ? "\u03A3\u03C5\u03BD\u03B4\u03B5\u03B4\u03B5\u03BC\u03AD\u03BD\u03BF\u03C2" : "\u0395\u03BA\u03C4\u03CC\u03C2 \u03C3\u03CD\u03BD\u03B4\u03B5\u03C3\u03B7\u03C2"}
-              </span>
             </div>
           </div>
           {pendingSyncs > 0 && (
@@ -655,12 +656,21 @@ export default function TablesPage() {
 
         <div className="flex items-center -mr-2">
           <button
+            onClick={() => router.push("/order?takeaway=1")}
+            className="flex items-center justify-center w-[60px] h-[60px] text-xl transition-transform active:scale-90"
+            aria-label="Takeaway / Walk-in"
+            style={{ color: "#f59e0b" }}
+            title="Takeaway"
+          >
+            🛍️
+          </button>
+          <button
             onClick={() => setShowMessageSheet(true)}
             className="flex items-center justify-center w-[60px] h-[60px] text-xl transition-transform active:scale-90"
-            aria-label="\u039C\u03AE\u03BD\u03C5\u03BC\u03B1 \u03C0\u03C1\u03BF\u03C3\u03C9\u03C0\u03B9\u03BA\u03BF\u03CD"
+            aria-label="Μήνυμα προσωπικού"
             style={{ color: "var(--c-text2)" }}
           >
-            {"\uD83D\uDCAC"}
+            💬
           </button>
           <button
             onClick={cycleTheme}
@@ -694,7 +704,7 @@ export default function TablesPage() {
           className="flex gap-2 overflow-x-auto px-4 py-2.5 border-b shrink-0"
           style={{ background: "var(--c-bg)", borderColor: "var(--c-border)" }}
         >
-          {[{ id: "all", name: "\u038C\u03BB\u03B1" }, ...sections].map((s) => (
+          {[{ id: "all", name: "Όλα" }, ...sections].map((s) => (
             <button
               key={s.id}
               onClick={() => setActiveSection(s.id)}
@@ -703,7 +713,7 @@ export default function TablesPage() {
               }`}
               style={activeSection !== s.id ? { background: "var(--c-surface2)", color: "var(--c-text2)" } : {}}
             >
-              {s.name}
+              {decodeUnicodeEscapes(s.name)}
             </button>
           ))}
         </div>
