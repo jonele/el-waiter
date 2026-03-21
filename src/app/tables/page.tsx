@@ -165,7 +165,28 @@ export default function TablesPage() {
   }
 
   function handleKeypadGo() {
-    if (keypadMatch) { openTable(keypadMatch); setKeypadInput(""); }
+    if (keypadMatch) {
+      openTable(keypadMatch);
+      setKeypadInput("");
+    } else if (keypadInput.trim()) {
+      // No match in local DB — create a temporary table ref and navigate anyway
+      const tempTable: DbTable = {
+        id: `temp-${keypadInput.trim()}`,
+        venue_id: venueId,
+        name: keypadInput.trim(),
+        floor_section_id: undefined,
+        capacity: 2,
+        status: "free",
+        sort_order: 0,
+        is_active: true,
+        seated_customer_name: undefined,
+        seated_covers: undefined,
+        seated_allergies: [],
+        seated_dietary: [],
+      };
+      openTable(tempTable);
+      setKeypadInput("");
+    }
   }
 
   // ---------- Reservation fetch ----------
@@ -903,17 +924,17 @@ export default function TablesPage() {
                   ))}
                 </div>
 
-                {/* GO button — full width */}
+                {/* GO button — full width, always active when input exists */}
                 <button
                   onClick={handleKeypadGo}
-                  disabled={!keypadMatch}
+                  disabled={!keypadInput.trim()}
                   className="w-full rounded-2xl h-16 text-xl font-black transition-transform active:scale-95 disabled:opacity-30"
                   style={{
-                    background: keypadMatch ? "var(--brand, #3B82F6)" : "var(--c-surface2)",
-                    color: keypadMatch ? "#fff" : "var(--c-text3)",
+                    background: keypadInput.trim() ? "var(--brand, #3B82F6)" : "var(--c-surface2)",
+                    color: keypadInput.trim() ? "#fff" : "var(--c-text3)",
                   }}
                 >
-                  {keypadMatch ? `\u2192 ${keypadMatch.name}` : "\u0395\u03B9\u03C3\u03AC\u03B3\u03B5\u03C4\u03B5 \u03B1\u03C1\u03B9\u03B8\u03BC\u03CC"}
+                  {keypadInput.trim() ? `\u2192 ${keypadMatch?.name || keypadInput.trim()}` : "\u0395\u03B9\u03C3\u03AC\u03B3\u03B5\u03C4\u03B5 \u03B1\u03C1\u03B9\u03B8\u03BC\u03CC"}
                 </button>
               </div>
 
