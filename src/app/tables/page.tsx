@@ -163,29 +163,12 @@ export default function TablesPage() {
   const [noMatchQuery, setNoMatchQuery] = useState("");
   const [splitParent, setSplitParent] = useState<DbTable | null>(null);
 
-  // Closest numeric suggestions when no match — show same "hundred" block
+  // All tables sorted numerically — always show everything so waiter can pick
   const noMatchSuggestions = (() => {
     if (!noMatchQuery) return [];
-    const num = parseInt(noMatchQuery);
-    if (isNaN(num)) return tables.sort((a, b) => (parseInt(a.name) || 0) - (parseInt(b.name) || 0)).slice(0, 20);
-    // Show all tables in same "hundred" range (e.g. typed 108 → show 100-199)
-    const rangeStart = Math.floor(num / 100) * 100;
-    const rangeEnd = rangeStart + 99;
-    const inRange = tables
-      .filter((t) => {
-        const n = parseInt(t.name);
-        return !isNaN(n) && n >= rangeStart && n <= rangeEnd;
-      })
+    return tables
+      .filter((t) => t.is_active)
       .sort((a, b) => (parseInt(a.name) || 0) - (parseInt(b.name) || 0));
-    // If no tables in range, show closest 20
-    if (inRange.length === 0) {
-      return tables
-        .map((t) => ({ t, dist: Math.abs((parseInt(t.name) || 0) - num) }))
-        .sort((a, b) => a.dist - b.dist)
-        .slice(0, 20)
-        .map(({ t }) => t);
-    }
-    return inRange;
   })();
 
   // Find next available sub-table letter for a parent
@@ -757,7 +740,7 @@ export default function TablesPage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="font-bold text-base" style={{ color: "var(--brand, #3B82F6)" }}>EL-Waiter</span>
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.1.1</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.1.2</span>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
               <div
@@ -1888,17 +1871,7 @@ export default function TablesPage() {
                 {/* Available tables — scrollable grid, tap to open or long-press to split */}
                 <div className="mb-4">
                   <p className="text-xs font-bold mb-2 uppercase tracking-wide" style={{ color: "var(--c-text3)" }}>
-                    {"\u0395\u03C0\u03B9\u03BB\u03AD\u03BE\u03C4\u03B5 \u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9:"}
-                    {noMatchSuggestions.length > 0 && (
-                      <span style={{ color: "var(--c-text2)", fontWeight: 400, textTransform: "none" }}>
-                        {" "}{(() => {
-                          const num = parseInt(noMatchQuery);
-                          if (isNaN(num)) return "";
-                          const rangeStart = Math.floor(num / 100) * 100;
-                          return `(${rangeStart}-${rangeStart + 99})`;
-                        })()}
-                      </span>
-                    )}
+                    {"\u0395\u03C0\u03B9\u03BB\u03AD\u03BE\u03C4\u03B5 \u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9:"} ({noMatchSuggestions.length})
                   </p>
                   <div className="grid grid-cols-5 gap-2 max-h-[40vh] overflow-y-auto rounded-xl p-1">
                     {noMatchSuggestions.map((t) => {
