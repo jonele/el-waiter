@@ -101,7 +101,26 @@ export default function SettingsPage() {
         <p className="font-bold text-lg" style={{ color: "var(--c-text)" }}>Ρυθμίσεις</p>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-5 pb-[calc(100px+env(safe-area-inset-bottom))]">
+      <div className="flex-1 overflow-y-auto px-4 py-6 space-y-5 pb-safe">
+
+        {/* Wallet shortcut */}
+        <button
+          onClick={() => router.push("/wallet")}
+          className="w-full rounded-2xl px-4 py-4 flex items-center justify-between transition-transform active:scale-[0.98]"
+          style={{ background: "var(--c-surface)", border: "1px solid var(--c-border)" }}
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-xl">💰</span>
+            <div>
+              <p className="font-semibold text-sm" style={{ color: "var(--c-text)" }}>Πορτοφόλι</p>
+              <p className="text-xs" style={{ color: "var(--c-text2)" }}>Στατιστικά & κέρδη βάρδιας</p>
+            </div>
+          </div>
+          <span style={{ color: "var(--c-text3)" }}>›</span>
+        </button>
+
+        {/* Divider */}
+        <div style={{ height: 1, background: "var(--c-border)" }} />
 
         {/* Theme selector */}
         <div className="space-y-2">

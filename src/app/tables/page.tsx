@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { waiterDb } from "@/lib/waiterDb";
 import { useWaiterStore } from "@/store/waiterStore";
 import { supabase, decodeUnicodeEscapes } from "@/lib/supabase";
-import BottomNav from "@/components/BottomNav";
+// BottomNav removed — all navigation in top header
 import PinchZoomContainer from "@/components/PinchZoomContainer";
 import { registerPushNotifications } from "@/lib/pushNotifications";
 import { pullVenueConfig } from "@/lib/venueConfig";
@@ -771,7 +771,7 @@ export default function TablesPage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="font-bold text-base" style={{ color: "var(--brand, #3B82F6)" }}>EL-Waiter</span>
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.3.0</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.3.1</span>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
               <div
@@ -829,14 +829,6 @@ export default function TablesPage() {
             aria-label="\u0391\u03BB\u03BB\u03B1\u03B3\u03AE \u03B8\u03AD\u03BC\u03B1\u03C4\u03BF\u03C2"
           >
             {THEME_ICON[theme]}
-          </button>
-          <button
-            onClick={() => router.push("/wallet")}
-            className="flex items-center justify-center w-[60px] h-[60px] transition-colors active:opacity-60"
-            style={{ color: "var(--c-text2)" }}
-            aria-label="\u03A0\u03BF\u03C1\u03C4\u03BF\u03C6\u03CC\u03BB\u03B9"
-          >
-            <WalletSvg />
           </button>
           <button
             onClick={() => router.push("/settings")}
@@ -906,23 +898,7 @@ export default function TablesPage() {
       {/* ============ TABLES TAB ============ */}
       {pageTab === "tables" && (
         <>
-          {/* Table number search bar — only show in map/list modes */}
-          {viewMode !== "keypad" && <div className="px-4 pt-3 pb-1 shrink-0">
-            <input
-              type="text"
-              inputMode="numeric"
-              value={tableSearch}
-              onChange={(e) => setTableSearch(e.target.value)}
-              onKeyDown={handleTableSearchKey}
-              placeholder="\u0391\u03C1\u03B9\u03B8\u03BC\u03CC\u03C2 \u03C4\u03C1\u03B1\u03C0\u03B5\u03B6\u03B9\u03BF\u03CD..."
-              className="w-full rounded-2xl px-4 py-3 text-base font-semibold outline-none"
-              style={{
-                background: "var(--c-surface2)",
-                color: "var(--c-text)",
-                border: `1.5px solid ${tableSearch ? "var(--brand, #3B82F6)" : "var(--c-border)"}`,
-              }}
-            />
-          </div>}
+          {/* Search bar removed — keypad handles table search */}
 
           {/* View mode toggle: Keypad / Map / Open tables */}
           <div className="flex gap-1.5 px-4 pt-2 shrink-0">
@@ -965,7 +941,7 @@ export default function TablesPage() {
 
           {/* ---- KEYPAD VIEW (PRIMARY) ---- */}
           {viewMode === "keypad" && (
-            <div className="flex-1 flex overflow-hidden pb-[calc(80px+env(safe-area-inset-bottom))]">
+            <div className="flex-1 flex overflow-hidden pb-[calc(16px+env(safe-area-inset-bottom))]">
               {/* Main numpad area */}
               <div className="flex-1 flex flex-col p-3 gap-3">
                 {/* Display: typed number + matched table info */}
@@ -1064,7 +1040,7 @@ export default function TablesPage() {
 
           {/* ---- OPEN TABLES LIST VIEW ---- */}
           {viewMode === "list" && (
-            <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(80px+env(safe-area-inset-bottom))]">
+            <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(16px+env(safe-area-inset-bottom))]">
               {(() => {
                 const openTables = tables
                   .filter((t) => t.status === "occupied" || orderTotals[t.id])
@@ -1117,7 +1093,7 @@ export default function TablesPage() {
 
           {/* ---- TABLES GRID VIEW (with pinch-to-zoom) ---- */}
           {viewMode === "map" && (
-          <PinchZoomContainer className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(80px+env(safe-area-inset-bottom))]">
+          <PinchZoomContainer className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(16px+env(safe-area-inset-bottom))]">
             {syncing && tables.length === 0 && (
               <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u03A3\u03C5\u03B3\u03C7\u03C1\u03BF\u03BD\u03B9\u03C3\u03BC\u03CC\u03C2..."}</p>
             )}
@@ -1324,7 +1300,7 @@ export default function TablesPage() {
 
       {/* ============ RESERVATIONS TAB ============ */}
       {pageTab === "reservations" && (
-        <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(80px+env(safe-area-inset-bottom))]">
+        <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(16px+env(safe-area-inset-bottom))]">
           {rsrvLoading && reservations.length === 0 && (
             <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u03A6\u03CC\u03C1\u03C4\u03C9\u03C3\u03B7..."}</p>
           )}
@@ -1395,7 +1371,7 @@ export default function TablesPage() {
 
       {/* ============ WAITLIST TAB ============ */}
       {pageTab === "waitlist" && (
-        <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(80px+env(safe-area-inset-bottom))]">
+        <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(16px+env(safe-area-inset-bottom))]">
           {waitLoading && waitlist.length === 0 && (
             <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u03A6\u03CC\u03C1\u03C4\u03C9\u03C3\u03B7..."}</p>
           )}
@@ -1428,7 +1404,7 @@ export default function TablesPage() {
           {/* Add to waitlist button */}
           <button
             onClick={() => setShowAddWaitlist(true)}
-            className="fixed right-5 bottom-[calc(80px+env(safe-area-inset-bottom)+16px)] z-40 w-[60px] h-[60px] rounded-full flex items-center justify-center text-2xl font-bold transition-transform active:scale-90"
+            className="fixed right-5 bottom-[calc(16px+env(safe-area-inset-bottom)+16px)] z-40 w-[60px] h-[60px] rounded-full flex items-center justify-center text-2xl font-bold transition-transform active:scale-90"
             style={{ background: "#3b82f6", color: "#fff", boxShadow: "0 4px 20px rgba(59,130,246,0.4)" }}
           >
             +
@@ -1804,8 +1780,6 @@ export default function TablesPage() {
           </div>
         </div>
       )}
-
-      <BottomNav />
 
       {/* Staff message bottom sheet */}
       {showMessageSheet && (
