@@ -86,41 +86,60 @@ function OrderPageInner() {
   }, [waiter, activeTable, isTakeaway]);
 
   async function loadData() {
+    const vid = useWaiterStore.getState().deviceVenueId || waiter!.venue_id;
     const [cats, existingOrder] = await Promise.all([
-      waiterDb.menuCategories.where("venue_id").equals(waiter!.venue_id).sortBy("sort_order"),
+      waiterDb.menuCategories.where("venue_id").equals(vid).sortBy("sort_order"),
       getOpenOrder(activeTable!.id),
     ]);
-    const activeCats = cats.filter((c) => c.is_active);
+    let activeCats = cats.filter((c) => c.is_active);
     setCategories(activeCats);
-    if (activeCats.length > 0) setActiveCategory(activeCats[0].id);
 
     if (existingOrder) {
       setOrder(existingOrder);
       setOrderItems(existingOrder.items);
     }
 
-    if (isOnline && supabase && waiter!.venue_id) {
+    // Always fetch fresh from Supabase when online
+    if (isOnline && supabase && vid) {
       const [{ data: dbCats }, { data: dbItems }] = await Promise.all([
-        supabase.from("menu_categories").select("*").eq("venue_id", waiter!.venue_id).eq("is_active", true),
-        supabase.from("menu_items").select("*").eq("venue_id", waiter!.venue_id).eq("is_active", true).eq("is_available", true),
+        supabase.from("menu_categories").select("*").eq("venue_id", vid).eq("is_active", true),
+        supabase.from("menu_items").select("*").eq("venue_id", vid).eq("is_active", true).eq("is_available", true),
       ]);
       if (dbCats) await waiterDb.menuCategories.bulkPut(dbCats);
       if (dbItems) await waiterDb.menuItems.bulkPut(dbItems);
-      const freshCats = await waiterDb.menuCategories.where("venue_id").equals(waiter!.venue_id).sortBy("sort_order");
-      const ac = freshCats.filter((c) => c.is_active);
-      setCategories(ac);
-      if (ac.length > 0 && !activeCategory) setActiveCategory(ac[0].id);
+      const freshCats = await waiterDb.menuCategories.where("venue_id").equals(vid).sortBy("sort_order");
+      activeCats = freshCats.filter((c) => c.is_active);
+      setCategories(activeCats);
     }
 
-    loadItems(activeCategory || (categories[0]?.id ?? ""));
+    // Set first category and load its items immediately
+    const firstCatId = activeCats[0]?.id ?? "";
+    if (firstCatId) {
+      setActiveCategory(firstCatId);
+      void loadItems(firstCatId);
+    }
   }
 
   async function loadItems(catId: string) {
     if (!catId) return;
-    const its = await waiterDb.menuItems
+    let its = await waiterDb.menuItems
       .where("category_id").equals(catId)
       .and((i) => i.is_active && i.is_available)
       .sortBy("sort_order");
+    // Fallback: if local DB empty for this category, fetch from Supabase
+    if (its.length === 0 && isOnline && supabase) {
+      const { data } = await supabase
+        .from("menu_items")
+        .select("*")
+        .eq("category_id", catId)
+        .eq("is_active", true)
+        .eq("is_available", true)
+        .order("sort_order");
+      if (data && data.length > 0) {
+        await waiterDb.menuItems.bulkPut(data);
+        its = data as DbMenuItem[];
+      }
+    }
     setItems(its);
   }
 
