@@ -158,6 +158,37 @@ export default function TablesPage() {
       || null;
   })();
 
+  // No-match sheet state
+  const [showNoMatch, setShowNoMatch] = useState(false);
+  const [noMatchQuery, setNoMatchQuery] = useState("");
+  const [splitParent, setSplitParent] = useState<DbTable | null>(null);
+
+  // Closest numeric suggestions when no match
+  const noMatchSuggestions = (() => {
+    if (!noMatchQuery) return [];
+    const num = parseInt(noMatchQuery);
+    if (isNaN(num)) return tables.slice(0, 6);
+    // Find tables with closest numeric names
+    return tables
+      .map((t) => ({ t, dist: Math.abs((parseInt(t.name) || 0) - num) }))
+      .filter(({ dist }) => dist < 50)
+      .sort((a, b) => a.dist - b.dist)
+      .slice(0, 6)
+      .map(({ t }) => t);
+  })();
+
+  // Find next available sub-table letter for a parent
+  function nextSubLetter(parentName: string): string {
+    const existing = tables
+      .filter((t) => t.name.toLowerCase().startsWith(parentName.toLowerCase()) && t.name.length > parentName.length)
+      .map((t) => t.name.slice(parentName.length).toUpperCase());
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+    for (const l of letters) {
+      if (!existing.includes(l)) return l;
+    }
+    return "A";
+  }
+
   function handleKeypadNum(v: string) {
     if (v === "C") { setKeypadInput(""); return; }
     if (v === "\u2190") { setKeypadInput((p) => p.slice(0, -1)); return; }
@@ -165,28 +196,73 @@ export default function TablesPage() {
   }
 
   function handleKeypadGo() {
+    const input = keypadInput.trim();
+    if (!input) return;
+
     if (keypadMatch) {
       openTable(keypadMatch);
       setKeypadInput("");
-    } else if (keypadInput.trim()) {
-      // No match in local DB — create a temporary table ref and navigate anyway
-      const tempTable: DbTable = {
-        id: `temp-${keypadInput.trim()}`,
-        venue_id: venueId,
-        name: keypadInput.trim(),
-        floor_section_id: undefined,
-        capacity: 2,
-        status: "free",
-        sort_order: 0,
-        is_active: true,
-        seated_customer_name: undefined,
-        seated_covers: undefined,
-        seated_allergies: [],
-        seated_dietary: [],
-      };
-      openTable(tempTable);
-      setKeypadInput("");
+      return;
     }
+
+    // Check if this looks like a split request (e.g. "108A" where "108" exists)
+    const letterMatch = input.match(/^(\d+)([A-Za-z]+)$/);
+    if (letterMatch) {
+      const parentName = letterMatch[1];
+      const parent = tables.find((t) => t.name === parentName);
+      if (parent) {
+        // Parent exists — auto-create sub-table
+        createSubTable(parent, letterMatch[2].toUpperCase());
+        return;
+      }
+    }
+
+    // No match at all — show the suggestion/split sheet
+    setNoMatchQuery(input);
+    setShowNoMatch(true);
+  }
+
+  async function createSubTable(parent: DbTable, suffix: string) {
+    const subName = `${parent.name}${suffix}`;
+    // Check if sub-table already exists
+    const existing = tables.find((t) => t.name.toLowerCase() === subName.toLowerCase());
+    if (existing) {
+      openTable(existing);
+      setKeypadInput("");
+      setShowNoMatch(false);
+      setSplitParent(null);
+      return;
+    }
+    // Create sub-table in Supabase
+    if (supabase) {
+      const { data } = await supabase.from("pos_tables").insert({
+        venue_id: venueId,
+        name: subName,
+        floor_section_id: parent.floor_section_id,
+        capacity: Math.max(1, Math.floor(parent.capacity / 2)),
+        status: "free",
+        sort_order: parent.sort_order + 1,
+        is_active: true,
+      }).select().single();
+      if (data) {
+        // Add to local DB + state
+        await waiterDb.posTables.bulkPut([{
+          id: data.id, venue_id: data.venue_id, name: data.name,
+          floor_section_id: data.floor_section_id, capacity: data.capacity,
+          status: data.status, sort_order: data.sort_order, is_active: true,
+        }]);
+        setTables((prev) => [...prev, {
+          id: data.id, venue_id: data.venue_id, name: data.name,
+          floor_section_id: data.floor_section_id, capacity: data.capacity,
+          status: data.status as "free" | "occupied" | "waiting",
+          sort_order: data.sort_order, is_active: true,
+        } as DbTable]);
+        openTable(data as DbTable);
+      }
+    }
+    setKeypadInput("");
+    setShowNoMatch(false);
+    setSplitParent(null);
   }
 
   // ---------- Reservation fetch ----------
@@ -1771,7 +1847,154 @@ export default function TablesPage() {
         </div>
       )}
 
-      {/* Old keypad overlay removed — now inline as viewMode="keypad" */}
+      {/* No-match bottom sheet: suggestions + split */}
+      {showNoMatch && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col justify-end"
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowNoMatch(false); setSplitParent(null); } }}
+          style={{ background: "rgba(0,0,0,0.5)" }}
+        >
+          <div
+            className="rounded-t-3xl px-4 pt-5 pb-safe max-h-[80vh] overflow-y-auto"
+            style={{
+              background: "var(--c-surface)",
+              borderTop: "1px solid var(--c-border)",
+              animation: "slideUp 0.2s ease-out",
+            }}
+          >
+            {!splitParent ? (
+              <>
+                {/* No match header */}
+                <div className="text-center mb-4">
+                  <p className="text-lg font-black" style={{ color: "var(--c-text)" }}>
+                    {"\u26A0\uFE0F"} {"\u0394\u03B5\u03BD \u03B2\u03C1\u03AD\u03B8\u03B7\u03BA\u03B5"} "{noMatchQuery}"
+                  </p>
+                  <p className="text-sm mt-1" style={{ color: "var(--c-text2)" }}>
+                    {"\u0395\u03C0\u03B9\u03BB\u03AD\u03BE\u03C4\u03B5 \u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9 \u03AE \u03C3\u03C0\u03AC\u03C3\u03C4\u03B5 \u03AD\u03BD\u03B1 \u03C3\u03B5 \u03C5\u03C0\u03BF-\u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9"}
+                  </p>
+                </div>
+
+                {/* Closest suggestions */}
+                {noMatchSuggestions.length > 0 && (
+                  <div className="mb-4">
+                    <p className="text-xs font-bold mb-2 uppercase tracking-wide" style={{ color: "var(--c-text3)" }}>
+                      {"\u039C\u03AE\u03C0\u03C9\u03C2 \u03B5\u03BD\u03BD\u03BF\u03B5\u03AF\u03C4\u03B5:"}
+                    </p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {noMatchSuggestions.map((t) => {
+                        const st = STATUS_BG[t.status] ?? STATUS_BG.free;
+                        return (
+                          <button
+                            key={t.id}
+                            onClick={() => { openTable(t); setKeypadInput(""); setShowNoMatch(false); }}
+                            className="rounded-xl py-3 px-2 flex flex-col items-center gap-1 transition-transform active:scale-90"
+                            style={{
+                              background: st.bg,
+                              border: `2px solid ${st.border}`,
+                            }}
+                          >
+                            <span className="text-lg font-black" style={{ color: "var(--c-card-text)" }}>{t.name}</span>
+                            <span className="text-[10px]" style={{ color: "var(--c-text2)" }}>
+                              {t.status === "occupied" ? "\u039A\u03B1\u03C4\u03B5\u03B9\u03BB\u03B7\u03BC\u03AD\u03BD\u03BF" : "\u0395\u03BB\u03B5\u03CD\u03B8\u03B5\u03C1\u03BF"}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* Split table option */}
+                <div className="mb-4">
+                  <p className="text-xs font-bold mb-2 uppercase tracking-wide" style={{ color: "var(--c-text3)" }}>
+                    {"\u0394\u03B9\u03B1\u03C7\u03C9\u03C1\u03B9\u03C3\u03BC\u03CC\u03C2 \u03C4\u03C1\u03B1\u03C0\u03B5\u03B6\u03B9\u03BF\u03CD:"}
+                  </p>
+                  <div className="grid grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
+                    {tables
+                      .filter((t) => /^\d+$/.test(t.name))
+                      .sort((a, b) => parseInt(a.name) - parseInt(b.name))
+                      .map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => setSplitParent(t)}
+                          className="rounded-xl py-3 text-center font-bold transition-transform active:scale-90"
+                          style={{
+                            background: "var(--c-surface2)",
+                            color: "var(--c-text)",
+                            border: "1px solid var(--c-border)",
+                          }}
+                        >
+                          {t.name}
+                        </button>
+                      ))
+                    }
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => { setShowNoMatch(false); }}
+                  className="w-full rounded-2xl py-4 font-bold text-sm transition-transform active:scale-95"
+                  style={{ background: "rgba(239,68,68,0.1)", color: "#f87171" }}
+                >
+                  {"\u0391\u039A\u03A5\u03A1\u03A9\u03A3\u0397"}
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Split confirmation: pick sub-letter */}
+                <div className="text-center mb-4">
+                  <p className="text-lg font-black" style={{ color: "var(--c-text)" }}>
+                    {"\u2702\uFE0F"} Split {splitParent.name}
+                  </p>
+                  <p className="text-sm mt-1" style={{ color: "var(--c-text2)" }}>
+                    {"\u0395\u03C0\u03B9\u03BB\u03AD\u03BE\u03C4\u03B5 \u03C5\u03C0\u03BF-\u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9:"}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-4 gap-3 mb-4">
+                  {["A","B","C","D","E","F","G","H"].map((letter) => {
+                    const subName = `${splitParent.name}${letter}`;
+                    const exists = tables.some((t) => t.name.toUpperCase() === subName.toUpperCase());
+                    const isNext = letter === nextSubLetter(splitParent.name);
+                    return (
+                      <button
+                        key={letter}
+                        onClick={() => {
+                          if (exists) {
+                            const ex = tables.find((t) => t.name.toUpperCase() === subName.toUpperCase());
+                            if (ex) { openTable(ex); setKeypadInput(""); setShowNoMatch(false); setSplitParent(null); }
+                          } else {
+                            void createSubTable(splitParent, letter);
+                          }
+                        }}
+                        className="rounded-2xl py-4 flex flex-col items-center gap-1 transition-transform active:scale-90 border-2"
+                        style={{
+                          background: exists ? "var(--c-occ)" : isNext ? "rgba(59,130,246,0.15)" : "var(--c-surface2)",
+                          borderColor: exists ? "var(--c-occ-b)" : isNext ? "var(--brand, #3B82F6)" : "var(--c-border)",
+                          color: "var(--c-text)",
+                        }}
+                      >
+                        <span className="text-xl font-black">{subName}</span>
+                        <span className="text-[10px]" style={{ color: "var(--c-text2)" }}>
+                          {exists ? "\u03A5\u03C0\u03AC\u03C1\u03C7\u03B5\u03B9" : isNext ? "\u0395\u03C0\u03CC\u03BC\u03B5\u03BD\u03BF" : "\u039D\u03AD\u03BF"}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <button
+                  onClick={() => setSplitParent(null)}
+                  className="w-full rounded-2xl py-4 font-bold text-sm transition-transform active:scale-95"
+                  style={{ background: "var(--c-surface2)", color: "var(--c-text2)" }}
+                >
+                  {"\u2190 \u03A0\u03AF\u03C3\u03C9"}
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Incoming staff message toast */}
       {incomingMsg && (
