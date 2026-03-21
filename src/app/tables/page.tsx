@@ -166,7 +166,7 @@ export default function TablesPage() {
 
   // All tables sorted numerically — always show everything so waiter can pick
   const [noMatchTables, setNoMatchTables] = useState<DbTable[]>([]);
-  const noMatchSuggestions = noMatchTables.length > 0 ? noMatchTables : tables.filter((t) => t.is_active).sort((a, b) => (parseInt(a.name) || 0) - (parseInt(b.name) || 0));
+  const noMatchSuggestions = noMatchTables.length > 0 ? noMatchTables : tables.filter((t) => t.is_active).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
   // Find next available sub-table letter for a parent
   function nextSubLetter(parentName: string): string {
@@ -208,20 +208,19 @@ export default function TablesPage() {
       }
     }
 
-    // No match at all — fetch fresh tables from Supabase and show sheet
+    // No match at all — fetch fresh tables from Supabase, THEN show sheet
     setNoMatchQuery(input);
-    setShowNoMatch(true);
-    // Always pull fresh from Supabase so the list is never empty
-    if (supabase && venueId) {
+    const vid = venueId || useWaiterStore.getState().deviceVenueId || "";
+    if (supabase && vid) {
       void (async () => {
-        const { data } = await supabase.from("pos_tables").select("*").eq("venue_id", venueId).eq("is_active", true);
+        const { data } = await supabase.from("pos_tables").select("*").eq("venue_id", vid).eq("is_active", true);
         if (data && data.length > 0) {
           const mapped = data.map((t) => ({
             id: t.id, venue_id: t.venue_id, name: t.name,
             floor_section_id: t.floor_section_id, capacity: t.capacity ?? 4,
             status: (t.status ?? "free") as "free" | "occupied" | "waiting",
             sort_order: t.sort_order ?? 0, is_active: true,
-          } as DbTable)).sort((a, b) => (parseInt(a.name) || 0) - (parseInt(b.name) || 0));
+          } as DbTable)).sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
           setNoMatchTables(mapped);
           // Also sync to local DB so next time they're available offline
           await waiterDb.posTables.bulkPut(data.map((t) => ({
@@ -232,7 +231,12 @@ export default function TablesPage() {
           // Refresh main tables state too
           setTables(mapped);
         }
+        // Show sheet AFTER data is loaded
+        setShowNoMatch(true);
       })();
+    } else {
+      // No Supabase — show sheet with whatever we have
+      setShowNoMatch(true);
     }
   }
 
@@ -763,7 +767,7 @@ export default function TablesPage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="font-bold text-base" style={{ color: "var(--brand, #3B82F6)" }}>EL-Waiter</span>
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.2.2</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.2.3</span>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
               <div
