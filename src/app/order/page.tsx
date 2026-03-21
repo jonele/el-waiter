@@ -610,15 +610,21 @@ function OrderPageInner() {
                           </span>
                         )}
 
-                        {/* Name + price */}
+                        {/* Name + modifiers + price */}
                         <div className="flex-1 py-3 min-w-0">
                           <p className="font-semibold text-sm truncate" style={{ color: "var(--c-text)" }}>{decodeUnicodeEscapes(item.name)}</p>
+                          {item.modifiers && item.modifiers.length > 0 && (
+                            <p className="text-[11px] mt-0.5 leading-snug" style={{ color: "var(--brand, #3B82F6)" }}>
+                              {item.modifiers.map((m) => m.name + (m.price_modifier > 0 ? ` +${m.price_modifier.toFixed(2)}\u20AC` : "")).join(" · ")}
+                            </p>
+                          )}
                           <p className="text-xs mt-0.5" style={{ color: "var(--c-text2)" }}>
-                            {item.price.toFixed(2)}€ × {item.quantity}
-                            {" = "}
-                            <span className="text-gray-300 font-medium">
-                              {(item.price * item.quantity).toFixed(2)}€
-                            </span>
+                            {(() => {
+                              const modExtra = (item.modifiers || []).reduce((s, m) => s + m.price_modifier, 0);
+                              const unitPrice = item.price + modExtra;
+                              const lineTotal = unitPrice * item.quantity;
+                              return (<>{unitPrice.toFixed(2)}{"\u20AC"} {"\u00D7"} {item.quantity} = <span className="text-gray-300 font-medium">{lineTotal.toFixed(2)}{"\u20AC"}</span></>);
+                            })()}
                           </p>
                         </div>
 
