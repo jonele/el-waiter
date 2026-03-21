@@ -10,6 +10,7 @@ const THEMES: { key: Theme; label: string; icon: string }[] = [
   { key: "dark",  label: "Σκοτεινό",  icon: "🌙" },
   { key: "grey",  label: "Γκρίζο",    icon: "🌫" },
   { key: "light", label: "Φωτεινό",   icon: "☀️" },
+  { key: "beach", label: "Παραλία",   icon: "🏖️" },
 ];
 
 export default function SettingsPage() {
@@ -105,7 +106,7 @@ export default function SettingsPage() {
         {/* Theme selector */}
         <div className="space-y-2">
           <label className="text-sm font-semibold" style={{ color: "var(--c-text2)" }}>Θέμα εφαρμογής</label>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-4 gap-2">
             {THEMES.map(({ key, label, icon }) => (
               <button
                 key={key}

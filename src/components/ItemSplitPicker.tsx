@@ -1,5 +1,6 @@
 "use client";
 import { useState, useMemo } from "react";
+import { decodeUnicodeEscapes } from "@/lib/supabase";
 import type { DbOrderItem } from "@/lib/waiterDb";
 
 interface Props {
@@ -99,7 +100,7 @@ export default function ItemSplitPicker({ items, paidItemIds, onConfirm, onCance
               </span>
               {/* Name */}
               <span className="flex-1 text-sm font-semibold text-white truncate">
-                {item.name}
+                {decodeUnicodeEscapes(item.name)}
               </span>
               {/* Price */}
               <span className="text-sm font-bold text-white shrink-0">
@@ -130,7 +131,7 @@ export default function ItemSplitPicker({ items, paidItemIds, onConfirm, onCance
                   {item.quantity}x
                 </span>
                 <span className="flex-1 text-sm font-semibold text-gray-500 truncate line-through">
-                  {item.name}
+                  {decodeUnicodeEscapes(item.name)}
                 </span>
                 <span className="text-sm font-bold text-gray-500 shrink-0">
                   {(item.quantity * item.price).toFixed(2)}€

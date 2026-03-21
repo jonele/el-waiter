@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from "zustand/middleware";
 import { DbWaiterProfile, DbTable } from "@/lib/waiterDb";
 import type { VenueDeviceConfig } from "@/lib/venueConfig";
 
-export type Theme = 'dark' | 'grey' | 'light';
+export type Theme = 'dark' | 'grey' | 'light' | 'beach';
 
 export interface WaiterSettings {
   bridgeUrl:         string;

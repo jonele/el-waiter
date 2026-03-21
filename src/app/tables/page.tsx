@@ -17,8 +17,8 @@ const STATUS_BG: Record<string, { bg: string; border: string; dot: string; dotCl
   waiting:  { bg: "var(--c-wait)",  border: "var(--c-wait-b)",  dot: "var(--status-wait-dot, #fbbf24)",  dotCls: "animate-pulse-fast" },
 };
 
-const THEME_CYCLE: Theme[] = ["dark", "grey", "light"];
-const THEME_ICON: Record<Theme, string> = { dark: "\uD83C\uDF19", grey: "\uD83C\uDF2B", light: "\u2600\uFE0F" };
+const THEME_CYCLE: Theme[] = ["dark", "grey", "light", "beach"];
+const THEME_ICON: Record<Theme, string> = { dark: "\uD83C\uDF19", grey: "\uD83C\uDF2B", light: "\u2600\uFE0F", beach: "\uD83C\uDFD6\uFE0F" };
 
 type PageTab = "tables" | "reservations" | "waitlist";
 
@@ -141,7 +141,28 @@ export default function TablesPage() {
   const [wiSource, setWiSource] = useState("walk_in");
   const [wiSubmitting, setWiSubmitting] = useState(false);
 
+  // Keypad state
+  const [showKeypad, setShowKeypad] = useState(false);
+  const [keypadInput, setKeypadInput] = useState("");
+  const [keypadUseText, setKeypadUseText] = useState(false);
+
+  // View mode (grid map vs open tables list)
+  const [viewMode, setViewMode] = useState<"map" | "list">("map");
+
   const venueId = deviceVenueId || waiter?.venue_id || "";
+
+  function handleKeypadNum(v: string) {
+    if (v === "\u232B") { setKeypadInput((p) => p.slice(0, -1)); return; }
+    if (v === "OK") {
+      if (!keypadInput.trim()) return;
+      const q = keypadInput.trim().toLowerCase();
+      const match = tables.find((t) => t.name.toLowerCase() === q)
+        || tables.find((t) => t.name.toLowerCase().startsWith(q));
+      if (match) { openTable(match); setKeypadInput(""); setShowKeypad(false); }
+      return;
+    }
+    setKeypadInput((p) => p + v);
+  }
 
   // ---------- Reservation fetch ----------
   const fetchReservations = useCallback(async () => {
@@ -624,7 +645,7 @@ export default function TablesPage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="font-bold text-base" style={{ color: "var(--brand, #3B82F6)" }}>EL-Waiter</span>
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.0.1</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.1.0</span>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
               <div
@@ -657,12 +678,16 @@ export default function TablesPage() {
         <div className="flex items-center -mr-2">
           <button
             onClick={() => router.push("/order?takeaway=1")}
-            className="flex items-center justify-center w-[60px] h-[60px] text-xl transition-transform active:scale-90"
+            className="flex items-center justify-center gap-1 h-[60px] px-3 text-xl transition-transform active:scale-90 rounded-xl"
             aria-label="Takeaway / Walk-in"
-            style={{ color: "#f59e0b" }}
+            style={{
+              color: "#f59e0b",
+              background: theme === "beach" ? "rgba(245,158,11,0.15)" : "transparent",
+              border: theme === "beach" ? "2px solid rgba(245,158,11,0.4)" : "none",
+            }}
             title="Takeaway"
           >
-            🛍️
+            {"\uD83D\uDECD\uFE0F"}{theme === "beach" && <span className="text-xs font-black">TAKE</span>}
           </button>
           <button
             onClick={() => setShowMessageSheet(true)}
@@ -773,6 +798,25 @@ export default function TablesPage() {
             />
           </div>
 
+          {/* View mode toggle: Map / Open tables */}
+          <div className="flex gap-2 px-4 pt-2 shrink-0">
+            {([
+              { key: "map" as const, label: "\u03A7\u03AC\u03C1\u03C4\u03B7\u03C2", icon: "\uD83D\uDDFA\uFE0F" },
+              { key: "list" as const, label: "\u0391\u03BD\u03BF\u03B9\u03C7\u03C4\u03AC", icon: "\uD83D\uDCCB" },
+            ]).map((m) => (
+              <button
+                key={m.key}
+                onClick={() => setViewMode(m.key)}
+                className={`flex-1 rounded-xl h-10 text-sm font-semibold transition-colors ${
+                  viewMode === m.key ? "bg-brand text-white" : "active:opacity-70"
+                }`}
+                style={viewMode !== m.key ? { background: "var(--c-surface2)", color: "var(--c-text2)" } : {}}
+              >
+                {m.icon} {m.label}
+              </button>
+            ))}
+          </div>
+
           {/* Assignment mode banner */}
           {(rsrvAssignMode || wlAssignMode) && (
             <div
@@ -792,13 +836,78 @@ export default function TablesPage() {
             </div>
           )}
 
-          {/* Tables grid */}
+          {/* ---- OPEN TABLES LIST VIEW ---- */}
+          {viewMode === "list" && (
+            <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(80px+env(safe-area-inset-bottom))]">
+              {(() => {
+                const openTables = tables
+                  .filter((t) => t.status === "occupied" || orderTotals[t.id])
+                  .sort((a, b) => {
+                    const na = parseInt(a.name) || 0, nb = parseInt(b.name) || 0;
+                    if (na !== nb) return na - nb;
+                    return a.name.localeCompare(b.name);
+                  });
+                if (openTables.length === 0) {
+                  return (
+                    <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>
+                      {"\u039A\u03B1\u03BD\u03AD\u03BD\u03B1 \u03B1\u03BD\u03BF\u03B9\u03C7\u03C4\u03CC \u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9"}
+                    </p>
+                  );
+                }
+                return openTables.map((t) => {
+                  const total = orderTotals[t.id];
+                  const st = STATUS_BG[t.status] ?? STATUS_BG.free;
+                  return (
+                    <button
+                      key={t.id}
+                      onClick={() => openTable(t)}
+                      className="w-full flex items-center gap-3 px-4 min-h-[60px] border-b transition-transform active:scale-[0.98]"
+                      style={{
+                        background: "var(--c-surface)",
+                        borderColor: "var(--c-border)",
+                        borderBottomWidth: "var(--c-table-border-w, 1px)",
+                      }}
+                    >
+                      <span
+                        className="h-3 w-3 rounded-full shrink-0"
+                        style={{ background: st.dot }}
+                      />
+                      <span className="text-lg font-black flex-shrink-0 min-w-[60px]" style={{ color: "var(--c-text)" }}>
+                        {t.name}
+                      </span>
+                      <span className="flex-1" />
+                      {total !== undefined && (
+                        <span className="text-sm font-bold" style={{ color: "var(--brand, #3B82F6)" }}>
+                          {total.toFixed(2)}{"\u20AC"}
+                        </span>
+                      )}
+                      <span className="text-lg" style={{ color: "var(--c-text3)" }}>{"\u203A"}</span>
+                    </button>
+                  );
+                });
+              })()}
+            </div>
+          )}
+
+          {/* ---- TABLES GRID VIEW ---- */}
+          {viewMode === "map" && (
           <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(80px+env(safe-area-inset-bottom))]">
             {syncing && tables.length === 0 && (
               <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u03A3\u03C5\u03B3\u03C7\u03C1\u03BF\u03BD\u03B9\u03C3\u03BC\u03CC\u03C2..."}</p>
             )}
             {!syncing && filtered.length === 0 && (
-              <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u0394\u03B5\u03BD \u03B2\u03C1\u03AD\u03B8\u03B7\u03BA\u03B1\u03BD \u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9\u03B1"}</p>
+              <div className="text-center mt-10">
+                <p className="text-sm" style={{ color: "var(--c-text3)" }}>{"\u0394\u03B5\u03BD \u03B2\u03C1\u03AD\u03B8\u03B7\u03BA\u03B1\u03BD \u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9\u03B1"}</p>
+                {activeSection !== "all" && tables.length > 0 && (
+                  <button
+                    onClick={() => setActiveSection("all")}
+                    className="mt-3 rounded-xl px-5 py-2.5 text-sm font-semibold transition-transform active:scale-95"
+                    style={{ background: "var(--brand, #3B82F6)", color: "#fff" }}
+                  >
+                    {"\u0395\u03BC\u03C6\u03AC\u03BD\u03B9\u03C3\u03B7 \u03CC\u03BB\u03C9\u03BD"}
+                  </button>
+                )}
+              </div>
             )}
             <div className="grid grid-cols-3 gap-3">
               {filtered.map((t) => {
@@ -825,12 +934,15 @@ export default function TablesPage() {
                       el.addEventListener("touchend", cancel, { once: true });
                       el.addEventListener("touchmove", cancel, { once: true });
                     }}
-                    className={`relative flex flex-col items-center justify-center gap-1 rounded-3xl border-2 min-h-[96px] px-2 py-4 transition-transform active:scale-90 duration-100 ${
+                    className={`relative flex flex-col items-center justify-center gap-1 min-h-[96px] px-2 py-4 transition-transform active:scale-90 duration-100 ${
                       (rsrvAssignMode || wlAssignMode) && !isOccupied ? "ring-2 ring-blue-400/60" : ""
                     }`}
                     style={{
                       background: st.bg,
                       borderColor: tblLate ? "#ef4444" : st.border,
+                      borderWidth: "var(--c-table-border-w, 2px)",
+                      borderStyle: "solid",
+                      borderRadius: "var(--c-table-radius, 1.5rem)",
                       boxShadow: tblLate ? "0 0 12px rgba(239,68,68,0.5)" : "var(--c-card-shadow)",
                       animation: tblLate ? "pulse 1.5s ease-in-out infinite" : undefined,
                     }}
@@ -980,6 +1092,7 @@ export default function TablesPage() {
               })}
             </div>
           </div>
+          )}
         </>
       )}
 
@@ -1529,6 +1642,106 @@ export default function TablesPage() {
             >
               {"\u0391\u03C0\u03BF\u03C3\u03C4\u03BF\u03BB\u03AE \u2192"}
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Keypad floating button */}
+      {!showKeypad && pageTab === "tables" && (
+        <button
+          onClick={() => setShowKeypad(true)}
+          className="fixed z-40 flex items-center justify-center w-14 h-14 rounded-2xl shadow-lg transition-transform active:scale-90"
+          style={{
+            bottom: "calc(90px + env(safe-area-inset-bottom))",
+            right: 16,
+            background: "var(--brand, #3B82F6)",
+            color: "#fff",
+            fontSize: 22,
+            fontWeight: 900,
+          }}
+          aria-label="Αριθμητικό πληκτρολόγιο"
+        >
+          #
+        </button>
+      )}
+
+      {/* Keypad bottom sheet */}
+      {showKeypad && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col justify-end"
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowKeypad(false); setKeypadInput(""); } }}
+        >
+          <div
+            className="rounded-t-3xl px-4 pt-4 pb-safe"
+            style={{
+              background: "var(--c-surface)",
+              borderTop: "1px solid var(--c-border)",
+              boxShadow: "0 -4px 30px rgba(0,0,0,0.3)",
+              animation: "slideUp 0.2s ease-out",
+            }}
+          >
+            {/* Input display */}
+            <div className="flex items-center gap-3 mb-4">
+              {keypadUseText ? (
+                <input
+                  autoFocus
+                  type="text"
+                  value={keypadInput}
+                  onChange={(e) => setKeypadInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleKeypadNum("OK"); }}
+                  placeholder="Αρ. τραπεζιού..."
+                  className="flex-1 rounded-xl px-4 py-3 text-xl font-black outline-none"
+                  style={{ background: "var(--c-surface2)", color: "var(--c-text)", border: "2px solid var(--brand, #3B82F6)" }}
+                />
+              ) : (
+                <div
+                  className="flex-1 rounded-xl px-4 py-3 text-xl font-black min-h-[52px] flex items-center"
+                  style={{ background: "var(--c-surface2)", color: "var(--c-text)", border: "2px solid var(--c-border)" }}
+                >
+                  {keypadInput || <span style={{ color: "var(--c-text3)" }}>Αρ. τραπεζιού...</span>}
+                </div>
+              )}
+              <button
+                onClick={() => { setKeypadUseText(!keypadUseText); }}
+                className="w-12 h-12 rounded-xl flex items-center justify-center text-lg transition-transform active:scale-90"
+                style={{ background: "var(--c-surface2)", color: "var(--c-text2)" }}
+                title={keypadUseText ? "Αριθμητικό" : "Πληκτρολόγιο"}
+              >
+                {keypadUseText ? "#" : "ABC"}
+              </button>
+              <button
+                onClick={() => { setShowKeypad(false); setKeypadInput(""); setKeypadUseText(false); }}
+                className="w-12 h-12 rounded-xl flex items-center justify-center text-lg transition-transform active:scale-90"
+                style={{ background: "rgba(239,68,68,0.15)", color: "#f87171" }}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Numpad grid */}
+            {!keypadUseText && (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                {["1","2","3","4","5","6","7","8","9","\u232B","0","OK"].map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => handleKeypadNum(v)}
+                    className="touch-btn flex items-center justify-center transition-transform active:scale-90"
+                    style={{
+                      minHeight: 64,
+                      borderRadius: "var(--c-table-radius, 18px)",
+                      fontSize: v === "OK" ? 18 : v === "\u232B" ? 22 : 24,
+                      fontWeight: v === "OK" ? 800 : 600,
+                      background: v === "OK" ? "var(--brand, #3B82F6)" : "var(--c-surface2)",
+                      color: v === "OK" ? "#ffffff" : "var(--c-text)",
+                      border: `var(--c-table-border-w, 1px) solid var(--c-border)`,
+                      boxShadow: "var(--c-num-shadow)",
+                    }}
+                  >
+                    {v}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useState, useMemo } from "react";
+import { Suspense, useEffect, useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { waiterDb, getOpenOrder, calcTotal } from "@/lib/waiterDb";
 import { useWaiterStore } from "@/store/waiterStore";
-import { supabase } from "@/lib/supabase";
+import { supabase, decodeUnicodeEscapes } from "@/lib/supabase";
 import { v4 as uuidv4 } from "uuid";
 import type { DbMenuCategory, DbMenuItem, DbOrderItem, DbOrder, DbTable } from "@/lib/waiterDb";
 
@@ -49,6 +49,14 @@ function groupBySeat(items: DbOrderItem[]): Map<number | null, DbOrderItem[]> {
 }
 
 export default function OrderPage() {
+  return (
+    <Suspense fallback={<div style={{ minHeight: "100dvh", background: "var(--c-bg)", display: "flex", alignItems: "center", justifyContent: "center" }}><p style={{ color: "var(--c-text3)" }}>Φόρτωση...</p></div>}>
+      <OrderPageInner />
+    </Suspense>
+  );
+}
+
+function OrderPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { waiter, activeTable: storeTable, settings, isOnline } = useWaiterStore();
@@ -392,7 +400,7 @@ export default function OrderPage() {
                   />
                 )}
                 <span className="text-[11px] font-medium leading-tight text-center line-clamp-2 px-1">
-                  {c.name}
+                  {decodeUnicodeEscapes(c.name)}
                 </span>
               </button>
             ))}
@@ -422,7 +430,7 @@ export default function OrderPage() {
                     style={qty === 0 ? { background: "var(--c-surface2)" } : {}}
                   >
                     <span className="text-sm font-semibold leading-snug line-clamp-2 flex-1" style={{ color: "var(--c-text)" }}>
-                      {item.name}
+                      {decodeUnicodeEscapes(item.name)}
                     </span>
                     <span className="text-accent font-bold text-sm mt-1.5">
                       {item.price.toFixed(2)}€
@@ -481,7 +489,7 @@ export default function OrderPage() {
 
                         {/* Name + price */}
                         <div className="flex-1 py-3 min-w-0">
-                          <p className="font-semibold text-sm truncate" style={{ color: "var(--c-text)" }}>{item.name}</p>
+                          <p className="font-semibold text-sm truncate" style={{ color: "var(--c-text)" }}>{decodeUnicodeEscapes(item.name)}</p>
                           <p className="text-xs mt-0.5" style={{ color: "var(--c-text2)" }}>
                             {item.price.toFixed(2)}€ × {item.quantity}
                             {" = "}

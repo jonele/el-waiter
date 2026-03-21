@@ -1,4 +1,44 @@
 
+## 2026-03-21 — EL-Waiter v2.1.0: Beach Club Architecture
+
+### Phase 1: "Classic Beach" Theme
+- New `.theme-beach` CSS variables in `globals.css` — industrial grey bg, white surfaces, black text, thick borders
+- Table cards: tinted fill + thick 3px solid border in status color (green/blue/amber)
+- All buttons auto-uppercase in beach mode via CSS rule
+- Theme type extended to `'dark' | 'grey' | 'light' | 'beach'`
+- Updated `ThemeApplicator.tsx`, `waiterStore.ts`, `settings/page.tsx` (4-col grid), `tables/page.tsx` (cycle + icon)
+
+### Phase 2: Lightning Navigation
+- **Numeric keypad**: Floating `#` button on tables page → bottom sheet with 0-9 numpad + backspace + OK
+  - `ABC` toggle switches to device keyboard for letter input (sub-tables)
+  - OK fuzzy-matches input against table names (exact first, then startsWith)
+- **Open Tables List**: `Χάρτης / Ανοιχτά` toggle above table grid
+  - List view shows only occupied tables with total, natural sort, tap to open
+
+### Phase 3: Takeaway Enhancement
+- Takeaway button styled with amber background + "TAKE" label in beach theme
+- (Core takeaway flow was already working from v2.0.1)
+
+### Phase 4: Bug Fixes & Branding
+- **Unicode fix**: Applied `decodeUnicodeEscapes()` to all category + item name renders in `order/page.tsx` and `ItemSplitPicker.tsx`
+- **Table rendering**: Added "Εμφάνιση όλων" fallback button when section filter yields 0 results but tables exist
+- **Branding**: Version badge bumped to v2.1.0
+- **Postcard ID**: Login page shows first 8 chars of venue UUID as `📍 Venue: A3B4C5D6`
+- **Build fix**: Wrapped `OrderPage` in `<Suspense>` for `useSearchParams()` (Next.js 15 requirement)
+
+### Files Changed
+- `src/app/globals.css` — `.theme-beach` block + beach uppercase utility
+- `src/store/waiterStore.ts` — Theme type extended
+- `src/components/ThemeApplicator.tsx` — beach class removal
+- `src/app/settings/page.tsx` — 4th theme button
+- `src/app/tables/page.tsx` — keypad, list view, theme cycle, branding, table fix, takeaway styling
+- `src/app/order/page.tsx` — Unicode decode, Suspense boundary
+- `src/app/page.tsx` — Postcard venue ID
+- `src/components/ItemSplitPicker.tsx` — Unicode decode
+- `package.json` — v2.1.0
+
+---
+
 ## 2026-03-15 — EL-POS Auto-Updater Endpoint
 
 ### New API Route

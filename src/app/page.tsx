@@ -429,6 +429,17 @@ export default function LoginPage() {
           📷 Σύνδεση με QR κωδικό
         </button>
 
+        {/* Postcard Venue ID */}
+        {deviceVenueId && (
+          <p style={{
+            color: "var(--c-text3)", fontSize: 11, fontFamily: "monospace",
+            background: "var(--c-surface)", borderRadius: 8, padding: "6px 12px",
+            letterSpacing: "0.05em",
+          }}>
+            {"\uD83D\uDCCD"} Venue: {deviceVenueId.slice(0, 8).toUpperCase()}
+          </p>
+        )}
+
         {/* Device reset */}
         <button
           onClick={() => setDeviceVenueId(null)}

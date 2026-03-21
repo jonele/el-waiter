@@ -75,6 +75,36 @@
   --c-brand-glow:   none;
 }
 
+.theme-beach {
+  --c-bg:           #c8c8c8;
+  --c-surface:      #ffffff;
+  --c-surface2:     #e0e0e0;
+  --c-text:         #000000;
+  --c-text2:        #333333;
+  --c-text3:        #666666;
+  --c-border:       rgba(0,0,0,0.25);
+  --c-header:       rgba(200,200,200,0.95);
+  /* Status: fill tint + thick border combo */
+  --c-free:         #dcfce7;
+  --c-free-b:       #22c55e;
+  --c-occ:          #dbeafe;
+  --c-occ-b:        #2563eb;
+  --c-wait:         #fef3c7;
+  --c-wait-b:       #f59e0b;
+  --c-card-text:    #000000;
+  --c-card-shadow:  0 2px 4px rgba(0,0,0,0.15);
+  --c-nav-shadow:   0 -2px 8px rgba(0,0,0,0.12);
+  --c-num-shadow:   0 2px 4px rgba(0,0,0,0.12);
+  --c-brand-glow:   none;
+  /* Beach-specific: thick blocky borders + blockier radius */
+  --c-table-border-w: 3px;
+  --c-table-radius: 8px;
+  /* Status dot colors (high contrast) */
+  --status-free-dot: #16a34a;
+  --status-occ-dot:  #2563eb;
+  --status-wait-dot: #d97706;
+}
+
 @layer base {
   :root {
     --safe-top: env(safe-area-inset-top);
@@ -131,6 +161,13 @@
   @keyframes slideUp {
     from { transform: translateY(100%); }
     to { transform: translateY(0); }
+  }
+
+  /* Beach theme: force uppercase on interactive elements */
+  .theme-beach button,
+  .theme-beach .beach-upper {
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
   }
 }
 
