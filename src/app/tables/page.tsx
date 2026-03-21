@@ -146,7 +146,7 @@ export default function TablesPage() {
   const [keypadInput, setKeypadInput] = useState("");
 
   // View mode: keypad (default/primary), map (grid), list (open tables)
-  const [viewMode, setViewMode] = useState<"keypad" | "map" | "list">("keypad");
+  const [viewMode, setViewMode] = useState<"keypad" | "map" | "list">("map");
 
   const venueId = deviceVenueId || waiter?.venue_id || "";
 
@@ -767,7 +767,7 @@ export default function TablesPage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="font-bold text-base" style={{ color: "var(--brand, #3B82F6)" }}>EL-Waiter</span>
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.2.4</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.2.5</span>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
               <div
