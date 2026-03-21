@@ -142,26 +142,30 @@ export default function TablesPage() {
   const [wiSubmitting, setWiSubmitting] = useState(false);
 
   // Keypad state
-  const [showKeypad, setShowKeypad] = useState(false);
   const [keypadInput, setKeypadInput] = useState("");
-  const [keypadUseText, setKeypadUseText] = useState(false);
 
-  // View mode (grid map vs open tables list)
-  const [viewMode, setViewMode] = useState<"map" | "list">("map");
+  // View mode: keypad (default/primary), map (grid), list (open tables)
+  const [viewMode, setViewMode] = useState<"keypad" | "map" | "list">("keypad");
 
   const venueId = deviceVenueId || waiter?.venue_id || "";
 
+  // Keypad matched table (live preview)
+  const keypadMatch = (() => {
+    if (!keypadInput.trim()) return null;
+    const q = keypadInput.trim().toLowerCase();
+    return tables.find((t) => t.name.toLowerCase() === q)
+      || tables.find((t) => t.name.toLowerCase().startsWith(q))
+      || null;
+  })();
+
   function handleKeypadNum(v: string) {
-    if (v === "\u232B") { setKeypadInput((p) => p.slice(0, -1)); return; }
-    if (v === "OK") {
-      if (!keypadInput.trim()) return;
-      const q = keypadInput.trim().toLowerCase();
-      const match = tables.find((t) => t.name.toLowerCase() === q)
-        || tables.find((t) => t.name.toLowerCase().startsWith(q));
-      if (match) { openTable(match); setKeypadInput(""); setShowKeypad(false); }
-      return;
-    }
+    if (v === "C") { setKeypadInput(""); return; }
+    if (v === "\u2190") { setKeypadInput((p) => p.slice(0, -1)); return; }
     setKeypadInput((p) => p + v);
+  }
+
+  function handleKeypadGo() {
+    if (keypadMatch) { openTable(keypadMatch); setKeypadInput(""); }
   }
 
   // ---------- Reservation fetch ----------
@@ -798,21 +802,22 @@ export default function TablesPage() {
             />
           </div>
 
-          {/* View mode toggle: Map / Open tables */}
-          <div className="flex gap-2 px-4 pt-2 shrink-0">
+          {/* View mode toggle: Keypad / Map / Open tables */}
+          <div className="flex gap-1.5 px-4 pt-2 shrink-0">
             {([
-              { key: "map" as const, label: "\u03A7\u03AC\u03C1\u03C4\u03B7\u03C2", icon: "\uD83D\uDDFA\uFE0F" },
-              { key: "list" as const, label: "\u0391\u03BD\u03BF\u03B9\u03C7\u03C4\u03AC", icon: "\uD83D\uDCCB" },
+              { key: "keypad" as const, label: "#" },
+              { key: "map" as const, label: "\u03A7\u03AC\u03C1\u03C4\u03B7\u03C2" },
+              { key: "list" as const, label: "\u0391\u03BD\u03BF\u03B9\u03C7\u03C4\u03AC" },
             ]).map((m) => (
               <button
                 key={m.key}
                 onClick={() => setViewMode(m.key)}
-                className={`flex-1 rounded-xl h-10 text-sm font-semibold transition-colors ${
+                className={`flex-1 rounded-xl h-10 text-sm font-bold transition-colors ${
                   viewMode === m.key ? "bg-brand text-white" : "active:opacity-70"
                 }`}
                 style={viewMode !== m.key ? { background: "var(--c-surface2)", color: "var(--c-text2)" } : {}}
               >
-                {m.icon} {m.label}
+                {m.label}
               </button>
             ))}
           </div>
@@ -833,6 +838,105 @@ export default function TablesPage() {
               >
                 {"\u0391\u03BA\u03CD\u03C1\u03C9\u03C3\u03B7"}
               </button>
+            </div>
+          )}
+
+          {/* ---- KEYPAD VIEW (PRIMARY) ---- */}
+          {viewMode === "keypad" && (
+            <div className="flex-1 flex overflow-hidden pb-[calc(80px+env(safe-area-inset-bottom))]">
+              {/* Main numpad area */}
+              <div className="flex-1 flex flex-col p-3 gap-3">
+                {/* Display: typed number + matched table info */}
+                <div
+                  className="rounded-2xl px-5 py-4 flex items-center gap-4"
+                  style={{ background: "var(--c-surface)", border: "2px solid var(--c-border)" }}
+                >
+                  <span
+                    className="text-4xl font-black leading-none flex-1"
+                    style={{ color: keypadMatch ? "var(--brand, #3B82F6)" : keypadInput ? "var(--c-text)" : "var(--c-text3)" }}
+                  >
+                    {keypadInput || "0"}
+                  </span>
+                  {keypadMatch && (
+                    <div className="flex flex-col items-end">
+                      <span className="text-sm font-semibold" style={{ color: "var(--c-text2)" }}>
+                        {keypadMatch.capacity} seats
+                      </span>
+                      <button
+                        onClick={() => { setKeypadInput(""); }}
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-xs transition-transform active:scale-90"
+                        style={{ background: "var(--c-surface2)", color: "var(--c-text3)" }}
+                      >
+                        {"\u2715"}
+                      </button>
+                    </div>
+                  )}
+                  {!keypadMatch && keypadInput && (
+                    <button
+                      onClick={() => { setKeypadInput(""); }}
+                      className="w-7 h-7 rounded-full flex items-center justify-center text-xs transition-transform active:scale-90"
+                      style={{ background: "var(--c-surface2)", color: "var(--c-text3)" }}
+                    >
+                      {"\u2715"}
+                    </button>
+                  )}
+                </div>
+
+                {/* Numpad grid — matching legacy POS layout */}
+                <div className="flex-1 grid grid-cols-3 gap-2">
+                  {["1","2","3","4","5","6","7","8","9","0","\u2190","C"].map((v) => (
+                    <button
+                      key={v}
+                      onClick={() => v === "C" || v === "\u2190" ? handleKeypadNum(v) : handleKeypadNum(v)}
+                      className="flex items-center justify-center transition-transform active:scale-90 rounded-xl"
+                      style={{
+                        fontSize: v === "\u2190" || v === "C" ? 20 : 28,
+                        fontWeight: 700,
+                        background: v === "C" ? "var(--c-surface2)" : "var(--c-surface)",
+                        color: v === "C" ? "var(--c-text2)" : "var(--c-text)",
+                        border: "2px solid var(--c-border)",
+                        boxShadow: "var(--c-num-shadow)",
+                      }}
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </div>
+
+                {/* GO button — full width */}
+                <button
+                  onClick={handleKeypadGo}
+                  disabled={!keypadMatch}
+                  className="w-full rounded-2xl h-16 text-xl font-black transition-transform active:scale-95 disabled:opacity-30"
+                  style={{
+                    background: keypadMatch ? "var(--brand, #3B82F6)" : "var(--c-surface2)",
+                    color: keypadMatch ? "#fff" : "var(--c-text3)",
+                  }}
+                >
+                  {keypadMatch ? `\u2192 ${keypadMatch.name}` : "\u0395\u03B9\u03C3\u03AC\u03B3\u03B5\u03C4\u03B5 \u03B1\u03C1\u03B9\u03B8\u03BC\u03CC"}
+                </button>
+              </div>
+
+              {/* Right sidebar: letter buttons for sub-tables */}
+              <div
+                className="w-12 overflow-y-auto flex flex-col gap-1 py-2 pr-2"
+                style={{ background: "var(--c-bg)" }}
+              >
+                {["A","B","C","D","E","F","G","H","I","J","K","L","M"].map((letter) => (
+                  <button
+                    key={letter}
+                    onClick={() => setKeypadInput((p) => p + letter)}
+                    className="w-10 h-9 rounded-lg flex items-center justify-center text-sm font-bold transition-transform active:scale-90"
+                    style={{
+                      background: "var(--c-surface)",
+                      color: "var(--c-text2)",
+                      border: "1px solid var(--c-border)",
+                    }}
+                  >
+                    {letter}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -1646,105 +1750,7 @@ export default function TablesPage() {
         </div>
       )}
 
-      {/* Keypad floating button */}
-      {!showKeypad && pageTab === "tables" && (
-        <button
-          onClick={() => setShowKeypad(true)}
-          className="fixed z-40 flex items-center justify-center w-14 h-14 rounded-2xl shadow-lg transition-transform active:scale-90"
-          style={{
-            bottom: "calc(90px + env(safe-area-inset-bottom))",
-            right: 16,
-            background: "var(--brand, #3B82F6)",
-            color: "#fff",
-            fontSize: 22,
-            fontWeight: 900,
-          }}
-          aria-label="Αριθμητικό πληκτρολόγιο"
-        >
-          #
-        </button>
-      )}
-
-      {/* Keypad bottom sheet */}
-      {showKeypad && (
-        <div
-          className="fixed inset-0 z-50 flex flex-col justify-end"
-          onClick={(e) => { if (e.target === e.currentTarget) { setShowKeypad(false); setKeypadInput(""); } }}
-        >
-          <div
-            className="rounded-t-3xl px-4 pt-4 pb-safe"
-            style={{
-              background: "var(--c-surface)",
-              borderTop: "1px solid var(--c-border)",
-              boxShadow: "0 -4px 30px rgba(0,0,0,0.3)",
-              animation: "slideUp 0.2s ease-out",
-            }}
-          >
-            {/* Input display */}
-            <div className="flex items-center gap-3 mb-4">
-              {keypadUseText ? (
-                <input
-                  autoFocus
-                  type="text"
-                  value={keypadInput}
-                  onChange={(e) => setKeypadInput(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") handleKeypadNum("OK"); }}
-                  placeholder="Αρ. τραπεζιού..."
-                  className="flex-1 rounded-xl px-4 py-3 text-xl font-black outline-none"
-                  style={{ background: "var(--c-surface2)", color: "var(--c-text)", border: "2px solid var(--brand, #3B82F6)" }}
-                />
-              ) : (
-                <div
-                  className="flex-1 rounded-xl px-4 py-3 text-xl font-black min-h-[52px] flex items-center"
-                  style={{ background: "var(--c-surface2)", color: "var(--c-text)", border: "2px solid var(--c-border)" }}
-                >
-                  {keypadInput || <span style={{ color: "var(--c-text3)" }}>Αρ. τραπεζιού...</span>}
-                </div>
-              )}
-              <button
-                onClick={() => { setKeypadUseText(!keypadUseText); }}
-                className="w-12 h-12 rounded-xl flex items-center justify-center text-lg transition-transform active:scale-90"
-                style={{ background: "var(--c-surface2)", color: "var(--c-text2)" }}
-                title={keypadUseText ? "Αριθμητικό" : "Πληκτρολόγιο"}
-              >
-                {keypadUseText ? "#" : "ABC"}
-              </button>
-              <button
-                onClick={() => { setShowKeypad(false); setKeypadInput(""); setKeypadUseText(false); }}
-                className="w-12 h-12 rounded-xl flex items-center justify-center text-lg transition-transform active:scale-90"
-                style={{ background: "rgba(239,68,68,0.15)", color: "#f87171" }}
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Numpad grid */}
-            {!keypadUseText && (
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                {["1","2","3","4","5","6","7","8","9","\u232B","0","OK"].map((v) => (
-                  <button
-                    key={v}
-                    onClick={() => handleKeypadNum(v)}
-                    className="touch-btn flex items-center justify-center transition-transform active:scale-90"
-                    style={{
-                      minHeight: 64,
-                      borderRadius: "var(--c-table-radius, 18px)",
-                      fontSize: v === "OK" ? 18 : v === "\u232B" ? 22 : 24,
-                      fontWeight: v === "OK" ? 800 : 600,
-                      background: v === "OK" ? "var(--brand, #3B82F6)" : "var(--c-surface2)",
-                      color: v === "OK" ? "#ffffff" : "var(--c-text)",
-                      border: `var(--c-table-border-w, 1px) solid var(--c-border)`,
-                      boxShadow: "var(--c-num-shadow)",
-                    }}
-                  >
-                    {v}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Old keypad overlay removed — now inline as viewMode="keypad" */}
 
       {/* Incoming staff message toast */}
       {incomingMsg && (
