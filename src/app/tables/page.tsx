@@ -164,12 +164,8 @@ export default function TablesPage() {
   const [splitParent, setSplitParent] = useState<DbTable | null>(null);
 
   // All tables sorted numerically — always show everything so waiter can pick
-  const noMatchSuggestions = (() => {
-    if (!noMatchQuery) return [];
-    return tables
-      .filter((t) => t.is_active)
-      .sort((a, b) => (parseInt(a.name) || 0) - (parseInt(b.name) || 0));
-  })();
+  const [noMatchTables, setNoMatchTables] = useState<DbTable[]>([]);
+  const noMatchSuggestions = noMatchTables.length > 0 ? noMatchTables : tables.filter((t) => t.is_active).sort((a, b) => (parseInt(a.name) || 0) - (parseInt(b.name) || 0));
 
   // Find next available sub-table letter for a parent
   function nextSubLetter(parentName: string): string {
@@ -211,9 +207,32 @@ export default function TablesPage() {
       }
     }
 
-    // No match at all — show the suggestion/split sheet
+    // No match at all — fetch fresh tables from Supabase and show sheet
     setNoMatchQuery(input);
     setShowNoMatch(true);
+    // Always pull fresh from Supabase so the list is never empty
+    if (supabase && venueId) {
+      void (async () => {
+        const { data } = await supabase.from("pos_tables").select("*").eq("venue_id", venueId).eq("is_active", true);
+        if (data && data.length > 0) {
+          const mapped = data.map((t) => ({
+            id: t.id, venue_id: t.venue_id, name: t.name,
+            floor_section_id: t.floor_section_id, capacity: t.capacity ?? 4,
+            status: (t.status ?? "free") as "free" | "occupied" | "waiting",
+            sort_order: t.sort_order ?? 0, is_active: true,
+          } as DbTable)).sort((a, b) => (parseInt(a.name) || 0) - (parseInt(b.name) || 0));
+          setNoMatchTables(mapped);
+          // Also sync to local DB so next time they're available offline
+          await waiterDb.posTables.bulkPut(data.map((t) => ({
+            id: t.id, venue_id: t.venue_id, name: t.name,
+            floor_section_id: t.floor_section_id, capacity: t.capacity ?? 4,
+            status: t.status ?? "free", sort_order: t.sort_order ?? 0, is_active: t.is_active ?? true,
+          })));
+          // Refresh main tables state too
+          setTables(mapped);
+        }
+      })();
+    }
   }
 
   async function createSubTable(parent: DbTable, suffix: string) {
@@ -387,9 +406,11 @@ export default function TablesPage() {
   }, [waiter?.venue_id, waiter?.role]);
 
   async function loadLocal() {
+    const vid = venueId || waiter?.venue_id || "";
+    if (!vid) return;
     const [secs, tbls, orders] = await Promise.all([
-      waiterDb.floorSections.where("venue_id").equals(waiter!.venue_id).sortBy("sort_order"),
-      waiterDb.posTables.where("venue_id").equals(waiter!.venue_id).sortBy("sort_order"),
+      waiterDb.floorSections.where("venue_id").equals(vid).sortBy("sort_order"),
+      waiterDb.posTables.where("venue_id").equals(vid).sortBy("sort_order"),
       waiterDb.orders.where("status").anyOf(["open", "sent"]).toArray(),
     ]);
     setSections(secs);
@@ -400,12 +421,13 @@ export default function TablesPage() {
   }
 
   async function syncFromSupabase() {
-    if (!supabase || !waiter!.venue_id) return;
+    const vid = venueId || waiter?.venue_id || "";
+    if (!supabase || !vid) return;
     setSyncing(true);
     try {
       const [{ data: secs }, { data: tbls }] = await Promise.all([
-        supabase.from("pos_floor_sections").select("*").eq("venue_id", waiter!.venue_id),
-        supabase.from("pos_tables").select("*").eq("venue_id", waiter!.venue_id),
+        supabase.from("pos_floor_sections").select("*").eq("venue_id", vid),
+        supabase.from("pos_tables").select("*").eq("venue_id", vid),
       ]);
       if (secs) {
         await waiterDb.floorSections.bulkPut(secs.map((s) => ({
@@ -740,7 +762,7 @@ export default function TablesPage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="font-bold text-base" style={{ color: "var(--brand, #3B82F6)" }}>EL-Waiter</span>
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.1.2</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.1.3</span>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
               <div
