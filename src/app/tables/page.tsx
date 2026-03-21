@@ -767,7 +767,7 @@ export default function TablesPage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="font-bold text-base" style={{ color: "var(--brand, #3B82F6)" }}>EL-Waiter</span>
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.2.3</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.2.4</span>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
               <div
@@ -924,7 +924,7 @@ export default function TablesPage() {
           <div className="flex gap-1.5 px-4 pt-2 shrink-0">
             {([
               { key: "keypad" as const, label: "#" },
-              { key: "map" as const, label: "\u03A7\u03AC\u03C1\u03C4\u03B7\u03C2" },
+              { key: "map" as const, label: "\uD83C\uDF7D\uFE0F \u03A4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9\u03B1" },
               { key: "list" as const, label: "\u0391\u03BD\u03BF\u03B9\u03C7\u03C4\u03AC" },
             ]).map((m) => (
               <button
