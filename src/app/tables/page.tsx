@@ -5,6 +5,7 @@ import { waiterDb } from "@/lib/waiterDb";
 import { useWaiterStore } from "@/store/waiterStore";
 import { supabase, decodeUnicodeEscapes } from "@/lib/supabase";
 import BottomNav from "@/components/BottomNav";
+import PinchZoomContainer from "@/components/PinchZoomContainer";
 import { registerPushNotifications } from "@/lib/pushNotifications";
 import { pullVenueConfig } from "@/lib/venueConfig";
 import type { DbTable, DbFloorSection, DbOrder, RsrvReservation, WaitlistEntry } from "@/lib/waiterDb";
@@ -1106,9 +1107,9 @@ export default function TablesPage() {
             </div>
           )}
 
-          {/* ---- TABLES GRID VIEW ---- */}
+          {/* ---- TABLES GRID VIEW (with pinch-to-zoom) ---- */}
           {viewMode === "map" && (
-          <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(80px+env(safe-area-inset-bottom))]">
+          <PinchZoomContainer className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(80px+env(safe-area-inset-bottom))]">
             {syncing && tables.length === 0 && (
               <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u03A3\u03C5\u03B3\u03C7\u03C1\u03BF\u03BD\u03B9\u03C3\u03BC\u03CC\u03C2..."}</p>
             )}
@@ -1308,7 +1309,7 @@ export default function TablesPage() {
                 );
               })}
             </div>
-          </div>
+          </PinchZoomContainer>
           )}
         </>
       )}
