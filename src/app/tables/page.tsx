@@ -163,18 +163,29 @@ export default function TablesPage() {
   const [noMatchQuery, setNoMatchQuery] = useState("");
   const [splitParent, setSplitParent] = useState<DbTable | null>(null);
 
-  // Closest numeric suggestions when no match
+  // Closest numeric suggestions when no match — show same "hundred" block
   const noMatchSuggestions = (() => {
     if (!noMatchQuery) return [];
     const num = parseInt(noMatchQuery);
-    if (isNaN(num)) return tables.slice(0, 6);
-    // Find tables with closest numeric names
-    return tables
-      .map((t) => ({ t, dist: Math.abs((parseInt(t.name) || 0) - num) }))
-      .filter(({ dist }) => dist < 50)
-      .sort((a, b) => a.dist - b.dist)
-      .slice(0, 6)
-      .map(({ t }) => t);
+    if (isNaN(num)) return tables.sort((a, b) => (parseInt(a.name) || 0) - (parseInt(b.name) || 0)).slice(0, 20);
+    // Show all tables in same "hundred" range (e.g. typed 108 → show 100-199)
+    const rangeStart = Math.floor(num / 100) * 100;
+    const rangeEnd = rangeStart + 99;
+    const inRange = tables
+      .filter((t) => {
+        const n = parseInt(t.name);
+        return !isNaN(n) && n >= rangeStart && n <= rangeEnd;
+      })
+      .sort((a, b) => (parseInt(a.name) || 0) - (parseInt(b.name) || 0));
+    // If no tables in range, show closest 20
+    if (inRange.length === 0) {
+      return tables
+        .map((t) => ({ t, dist: Math.abs((parseInt(t.name) || 0) - num) }))
+        .sort((a, b) => a.dist - b.dist)
+        .slice(0, 20)
+        .map(({ t }) => t);
+    }
+    return inRange;
   })();
 
   // Find next available sub-table letter for a parent
@@ -1874,62 +1885,71 @@ export default function TablesPage() {
                   </p>
                 </div>
 
-                {/* Closest suggestions */}
-                {noMatchSuggestions.length > 0 && (
-                  <div className="mb-4">
-                    <p className="text-xs font-bold mb-2 uppercase tracking-wide" style={{ color: "var(--c-text3)" }}>
-                      {"\u039C\u03AE\u03C0\u03C9\u03C2 \u03B5\u03BD\u03BD\u03BF\u03B5\u03AF\u03C4\u03B5:"}
-                    </p>
-                    <div className="grid grid-cols-3 gap-2">
-                      {noMatchSuggestions.map((t) => {
-                        const st = STATUS_BG[t.status] ?? STATUS_BG.free;
-                        return (
-                          <button
-                            key={t.id}
-                            onClick={() => { openTable(t); setKeypadInput(""); setShowNoMatch(false); }}
-                            className="rounded-xl py-3 px-2 flex flex-col items-center gap-1 transition-transform active:scale-90"
-                            style={{
-                              background: st.bg,
-                              border: `2px solid ${st.border}`,
-                            }}
-                          >
-                            <span className="text-lg font-black" style={{ color: "var(--c-card-text)" }}>{t.name}</span>
-                            <span className="text-[10px]" style={{ color: "var(--c-text2)" }}>
-                              {t.status === "occupied" ? "\u039A\u03B1\u03C4\u03B5\u03B9\u03BB\u03B7\u03BC\u03AD\u03BD\u03BF" : "\u0395\u03BB\u03B5\u03CD\u03B8\u03B5\u03C1\u03BF"}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-
-                {/* Split table option */}
+                {/* Available tables — scrollable grid, tap to open or long-press to split */}
                 <div className="mb-4">
                   <p className="text-xs font-bold mb-2 uppercase tracking-wide" style={{ color: "var(--c-text3)" }}>
-                    {"\u0394\u03B9\u03B1\u03C7\u03C9\u03C1\u03B9\u03C3\u03BC\u03CC\u03C2 \u03C4\u03C1\u03B1\u03C0\u03B5\u03B6\u03B9\u03BF\u03CD:"}
+                    {"\u0395\u03C0\u03B9\u03BB\u03AD\u03BE\u03C4\u03B5 \u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9:"}
+                    {noMatchSuggestions.length > 0 && (
+                      <span style={{ color: "var(--c-text2)", fontWeight: 400, textTransform: "none" }}>
+                        {" "}{(() => {
+                          const num = parseInt(noMatchQuery);
+                          if (isNaN(num)) return "";
+                          const rangeStart = Math.floor(num / 100) * 100;
+                          return `(${rangeStart}-${rangeStart + 99})`;
+                        })()}
+                      </span>
+                    )}
                   </p>
-                  <div className="grid grid-cols-4 gap-2 max-h-[200px] overflow-y-auto">
-                    {tables
-                      .filter((t) => /^\d+$/.test(t.name))
-                      .sort((a, b) => parseInt(a.name) - parseInt(b.name))
-                      .map((t) => (
+                  <div className="grid grid-cols-5 gap-2 max-h-[40vh] overflow-y-auto rounded-xl p-1">
+                    {noMatchSuggestions.map((t) => {
+                      const st = STATUS_BG[t.status] ?? STATUS_BG.free;
+                      return (
                         <button
                           key={t.id}
-                          onClick={() => setSplitParent(t)}
-                          className="rounded-xl py-3 text-center font-bold transition-transform active:scale-90"
+                          onClick={() => { openTable(t); setKeypadInput(""); setShowNoMatch(false); }}
+                          onContextMenu={(e) => { e.preventDefault(); setSplitParent(t); }}
+                          className="rounded-xl min-h-[56px] flex flex-col items-center justify-center gap-0.5 transition-transform active:scale-90"
                           style={{
-                            background: "var(--c-surface2)",
-                            color: "var(--c-text)",
-                            border: "1px solid var(--c-border)",
+                            background: st.bg,
+                            border: `2px solid ${st.border}`,
                           }}
                         >
-                          {t.name}
+                          <span className="text-base font-black" style={{ color: "var(--c-card-text)" }}>{t.name}</span>
+                          <span
+                            className="h-1.5 w-1.5 rounded-full"
+                            style={{ background: st.dot }}
+                          />
                         </button>
-                      ))
-                    }
+                      );
+                    })}
                   </div>
+                  {noMatchSuggestions.length > 0 && (
+                    <p className="text-[10px] mt-1.5 text-center" style={{ color: "var(--c-text3)" }}>
+                      {"\u03A0\u03B1\u03C4\u03AE\u03C3\u03C4\u03B5 \u03C0\u03B1\u03C1\u03B1\u03C4\u03B5\u03C4\u03B1\u03BC\u03AD\u03BD\u03B1 \u03B3\u03B9\u03B1 split"}
+                    </p>
+                  )}
                 </div>
+
+                {/* Quick split shortcut — show only if there are numeric tables */}
+                {tables.some((t) => /^\d+$/.test(t.name)) && (
+                <div className="mb-4">
+                  <button
+                    onClick={() => {
+                      // Find closest table to split
+                      const num = parseInt(noMatchQuery);
+                      const closest = !isNaN(num) ? tables
+                        .filter((t) => /^\d+$/.test(t.name))
+                        .sort((a, b) => Math.abs(parseInt(a.name) - num) - Math.abs(parseInt(b.name) - num))[0]
+                        : null;
+                      if (closest) setSplitParent(closest);
+                    }}
+                    className="w-full rounded-xl py-3 text-sm font-semibold transition-transform active:scale-95 flex items-center justify-center gap-2"
+                    style={{ background: "var(--c-surface2)", color: "var(--c-text)", border: "1px solid var(--c-border)" }}
+                  >
+                    {"\u2702\uFE0F"} {"\u0394\u03B9\u03B1\u03C7\u03C9\u03C1\u03B9\u03C3\u03BC\u03CC\u03C2 \u03C4\u03C1\u03B1\u03C0\u03B5\u03B6\u03B9\u03BF\u03CD"}
+                  </button>
+                </div>
+                )}
 
                 <button
                   onClick={() => { setShowNoMatch(false); }}
