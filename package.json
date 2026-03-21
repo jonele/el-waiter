@@ -1,6 +1,6 @@
 {
   "name": "el-waiter",
-  "version": "2.1.1",
+  "version": "2.3.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -34,6 +34,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.2.0",
+    "@playwright/test": "^1.58.2",
     "@tauri-apps/cli": "^2",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",

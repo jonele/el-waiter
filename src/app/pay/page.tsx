@@ -57,7 +57,7 @@ export default function PayPage() {
   const [showTerminalPicker, setShowTerminalPicker] = useState(false);
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const venueId = waiter?.venue_id ?? deviceVenueId ?? "";
+  const venueId = deviceVenueId ?? waiter?.venue_id ?? "";
 
   useEffect(() => {
     if (!waiter || !activeTable) { router.replace("/tables"); return; }

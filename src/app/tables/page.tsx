@@ -92,6 +92,7 @@ export default function TablesPage() {
   const [orderTotals, setOrderTotals] = useState<Record<string, number>>({});
   const [activeSection, setActiveSection] = useState<string>("all");
   const [syncing, setSyncing] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [tableSearch, setTableSearch] = useState("");
 
   // Page-level tab
@@ -453,7 +454,10 @@ export default function TablesPage() {
         })));
       }
       loadLocal();
-    } catch {}
+    } catch (err) {
+      setSyncError(`Σφάλμα συγχρονισμού: ${err instanceof Error ? err.message : "Ελέγξτε σύνδεση"}`);
+      setTimeout(() => setSyncError(null), 5000);
+    }
     setSyncing(false);
   }
 
@@ -767,7 +771,7 @@ export default function TablesPage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="font-bold text-base" style={{ color: "var(--brand, #3B82F6)" }}>EL-Waiter</span>
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.2.5</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.3.0</span>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
               <div
@@ -2013,6 +2017,18 @@ export default function TablesPage() {
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Sync error toast */}
+      {syncError && (
+        <div style={{
+          position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)",
+          background: "#ef4444", color: "#fff", padding: "10px 20px",
+          borderRadius: 12, fontWeight: 700, fontSize: 13, zIndex: 9999,
+          boxShadow: "0 4px 20px rgba(0,0,0,0.4)", maxWidth: "90vw", textAlign: "center",
+        }}>
+          {"\u26A0\uFE0F"} {syncError}
         </div>
       )}
 
