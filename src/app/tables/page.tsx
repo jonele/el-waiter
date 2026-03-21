@@ -12,11 +12,21 @@ import type { DbTable, DbFloorSection, DbOrder, RsrvReservation, WaitlistEntry }
 import type { Theme } from "@/store/waiterStore";
 import type { BillRequest } from "@/lib/supabase";
 
-const STATUS_BG: Record<string, { bg: string; border: string; dot: string; dotCls: string }> = {
-  free:     { bg: "var(--c-free)",  border: "var(--c-free-b)",  dot: "var(--status-free-dot, #4ade80)",  dotCls: "animate-pulse" },
-  occupied: { bg: "var(--c-occ)",   border: "var(--c-occ-b)",   dot: "var(--status-occ-dot, #60a5fa)",   dotCls: "" },
-  waiting:  { bg: "var(--c-wait)",  border: "var(--c-wait-b)",  dot: "var(--status-wait-dot, #fbbf24)",  dotCls: "animate-pulse-fast" },
-};
+// Premium table card styles — ported from RSRV FloorPlanTheme
+function getStatusStyle(status: string, isDark: boolean) {
+  const styles: Record<string, { bg: string; border: string; dot: string; dotCls: string; text: string; muted: string }> = isDark ? {
+    free:     { bg: "linear-gradient(180deg, #262626 0%, #1f1f1f 100%)", border: "#404040", dot: "#22c55e", dotCls: "animate-pulse", text: "#fafafa", muted: "#a1a1aa" },
+    occupied: { bg: "linear-gradient(180deg, #262626 0%, #1f1f1f 100%)", border: "#3f3f46", dot: "#71717a", dotCls: "", text: "#a1a1aa", muted: "#71717a" },
+    waiting:  { bg: "linear-gradient(180deg, #2a2517 0%, #221e12 100%)", border: "#4a3f20", dot: "#f59e0b", dotCls: "animate-pulse-fast", text: "#fcd34d", muted: "#a1a1aa" },
+    reserved: { bg: "linear-gradient(180deg, #1a2928 0%, #152221 100%)", border: "#2d4a47", dot: "#2dd4bf", dotCls: "", text: "#5eead4", muted: "#a1a1aa" },
+  } : {
+    free:     { bg: "linear-gradient(180deg, #ffffff 0%, #fafafa 100%)", border: "#d1d5db", dot: "#22c55e", dotCls: "animate-pulse", text: "#374151", muted: "#64748b" },
+    occupied: { bg: "linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%)", border: "#94a3b8", dot: "#64748b", dotCls: "", text: "#475569", muted: "#94a3b8" },
+    waiting:  { bg: "linear-gradient(180deg, #fffbeb 0%, #fef3c7 100%)", border: "#fcd34d", dot: "#f59e0b", dotCls: "animate-pulse-fast", text: "#b45309", muted: "#64748b" },
+    reserved: { bg: "linear-gradient(180deg, #f0fdfa 0%, #e6fffa 100%)", border: "#5eead4", dot: "#14b8a6", dotCls: "", text: "#0d9488", muted: "#64748b" },
+  };
+  return styles[status] ?? styles.free;
+}
 
 const THEME_CYCLE: Theme[] = ["dark", "grey", "light", "beach"];
 const THEME_ICON: Record<Theme, string> = { dark: "\uD83C\uDF19", grey: "\uD83C\uDF2B", light: "\u2600\uFE0F", beach: "\uD83C\uDFD6\uFE0F" };
@@ -771,7 +781,7 @@ export default function TablesPage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="font-bold text-base" style={{ color: "var(--brand, #3B82F6)" }}>EL-Waiter</span>
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.3.1</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.4.0</span>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
               <div
@@ -1058,7 +1068,7 @@ export default function TablesPage() {
                 }
                 return openTables.map((t) => {
                   const total = orderTotals[t.id];
-                  const st = STATUS_BG[t.status] ?? STATUS_BG.free;
+                  const st = getStatusStyle(t.status, theme === "dark" || theme === "grey");
                   return (
                     <button
                       key={t.id}
@@ -1111,11 +1121,12 @@ export default function TablesPage() {
                 )}
               </div>
             )}
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-4 md:grid-cols-5">
               {filtered.map((t) => {
                 const total = orderTotals[t.id];
                 const minOk = !settings.minConsumptionEur || !total || total >= settings.minConsumptionEur;
-                const st = STATUS_BG[t.status] ?? STATUS_BG.free;
+                const isDark = theme === "dark" || theme === "grey";
+                const st = getStatusStyle(t.status, isDark);
                 const isPendingMove = pendingMoveTableId === t.id;
                 const isDenied = moveDenied === t.id;
                 const isOccupied = t.status === "occupied" || orderTotals[t.id] !== undefined;
@@ -1136,34 +1147,39 @@ export default function TablesPage() {
                       el.addEventListener("touchend", cancel, { once: true });
                       el.addEventListener("touchmove", cancel, { once: true });
                     }}
-                    className={`relative flex flex-col items-center justify-center gap-1 min-h-[96px] px-2 py-4 transition-transform active:scale-90 duration-100 ${
-                      (rsrvAssignMode || wlAssignMode) && !isOccupied ? "ring-2 ring-blue-400/60" : ""
+                    className={`relative flex flex-col items-center justify-center rounded-md transition-all duration-200 active:scale-95 ${
+                      (rsrvAssignMode || wlAssignMode) && !isOccupied ? "ring-2 ring-offset-1 ring-green-400 animate-pulse" : ""
                     }`}
                     style={{
-                      background: st.bg,
-                      borderColor: tblLate ? "#ef4444" : st.border,
-                      borderWidth: "var(--c-table-border-w, 2px)",
-                      borderStyle: "solid",
-                      borderRadius: "var(--c-table-radius, 1.5rem)",
-                      boxShadow: tblLate ? "0 0 12px rgba(239,68,68,0.5)" : "var(--c-card-shadow)",
+                      minHeight: 72,
+                      padding: "8px 4px",
+                      background: tblLate ? (isDark ? "rgba(239,68,68,0.35)" : "rgba(239,68,68,0.18)") : st.bg,
+                      border: `1.5px solid ${tblLate ? "#ef4444" : st.border}`,
+                      boxShadow: tblLate
+                        ? "0 0 12px rgba(239,68,68,0.5)"
+                        : isDark
+                          ? "0 1px 3px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.03)"
+                          : "0 1px 3px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.5)",
                       animation: tblLate ? "pulse 1.5s ease-in-out infinite" : undefined,
                     }}
                   >
-                    {/* Status dot */}
-                    {!isOccupied && (
-                      <span
-                        className={`absolute top-2.5 right-2.5 h-2.5 w-2.5 rounded-full ${st.dotCls}`}
-                        style={{ background: st.dot }}
-                      />
-                    )}
+                    {/* Status indicator dot — RSRV style with ring */}
+                    <span
+                      className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full ${st.dotCls}`}
+                      style={{
+                        backgroundColor: st.dot,
+                        boxShadow: `0 0 0 1.5px ${isDark ? "#1a1a1a" : "#fff"}`,
+                      }}
+                    />
+
                     {!minOk && (
-                      <span className="absolute top-2 left-2 text-xs text-amber-400 leading-none">{"\u26A0"}</span>
+                      <span className="absolute top-0.5 left-0.5 text-[9px] text-amber-400 leading-none">{"\u26A0"}</span>
                     )}
 
-                    {/* Move button */}
+                    {/* Move button — smaller, more subtle */}
                     {isOccupied && !isPendingMove && (
                       <button
-                        className="absolute top-1.5 left-1.5 w-9 h-9 rounded-xl flex items-center justify-center text-base font-bold transition-transform active:scale-90"
+                        className="absolute top-0.5 left-0.5 w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold transition-transform active:scale-90"
                         style={{ background: "rgba(245,158,11,0.25)", color: "#fbbf24" }}
                         onClick={(e) => { e.stopPropagation(); setMoveReqSource(t); }}
                       >
@@ -1171,62 +1187,33 @@ export default function TablesPage() {
                       </button>
                     )}
 
-                    {/* Bill request button */}
-                    {isOccupied && !isPendingMove && !isBillFlash && (
-                      <button
-                        className="absolute top-1.5 right-1.5 w-9 h-9 rounded-xl flex items-center justify-center text-base transition-transform active:scale-90"
-                        style={{
-                          background: isPendingBill ? "rgba(245,158,11,0.35)" : "rgba(255,255,255,0.12)",
-                          color: isPendingBill ? "#fbbf24" : "var(--c-card-text)",
-                        }}
-                        onClick={(e) => { e.stopPropagation(); void submitBillRequest(t); }}
-                        aria-label="\u0391\u03AF\u03C4\u03B7\u03BC\u03B1 \u03BB\u03BF\u03B3\u03B1\u03C1\u03B9\u03B1\u03C3\u03BC\u03BF\u03CD"
-                      >
-                        {"\uD83D\uDCB3"}
-                      </button>
-                    )}
-
-                    {/* Bill pending badge */}
-                    {isPendingBill && !isBillFlash && (
-                      <span className="absolute bottom-1.5 right-1.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold leading-none"
-                        style={{ background: "rgba(245,158,11,0.3)", color: "#fbbf24" }}>
-                        {"\u0396\u03B7\u03C4\u03AE\u03B8\u03B7\u03BA\u03B5"}
-                      </span>
-                    )}
-
                     {/* Bill flash feedback */}
                     {isBillFlash && billFlash && (
-                      <div className={`absolute inset-0 rounded-3xl flex flex-col items-center justify-center ${billFlash.type === "processed" ? "bg-green-900/70" : "bg-zinc-800/80"}`}>
-                        <span className="text-lg leading-none">{billFlash.type === "processed" ? "\u2713" : "\u2715"}</span>
-                        <span className="text-xs font-semibold mt-1" style={{ color: billFlash.type === "processed" ? "#86efac" : "#a1a1aa" }}>
-                          {billFlash.type === "processed" ? "\u0395\u03BE\u03BF\u03C6\u03BB\u03AE\u03B8\u03B7\u03BA\u03B5" : "\u0391\u03BA\u03C5\u03C1\u03CE\u03B8\u03B7\u03BA\u03B5"}
+                      <div className="absolute inset-0 rounded-md flex flex-col items-center justify-center" style={{ background: billFlash.type === "processed" ? "rgba(22,163,74,0.7)" : "rgba(63,63,70,0.8)" }}>
+                        <span className="text-sm leading-none">{billFlash.type === "processed" ? "\u2713" : "\u2715"}</span>
+                        <span className="text-[9px] font-semibold mt-0.5" style={{ color: billFlash.type === "processed" ? "#86efac" : "#a1a1aa" }}>
+                          {billFlash.type === "processed" ? "\u0395\u03BE\u03BF\u03C6\u03BB." : "\u0391\u03BA\u03C5\u03C1."}
                         </span>
                       </div>
                     )}
 
-                    {/* Kitchen status badge */}
-                    {kitchenSt && !isPendingMove && !isBillFlash && (
-                      <span
-                        className="absolute bottom-1.5 left-1.5 text-sm leading-none"
-                        title={kitchenSt === "done" ? "\u0388\u03C4\u03BF\u03B9\u03BC\u03BF" : "\u03A3\u03C4\u03B7\u03BD \u03BA\u03BF\u03C5\u03B6\u03AF\u03BD\u03B1"}
-                      >
-                        {kitchenSt === "done" ? "\u2705" : "\uD83C\uDF73"}
-                      </span>
-                    )}
-
-                    {/* VIP crown on table */}
-                    {tblRsrv?.source === "vip" && (
-                      <span className="absolute top-1 left-1/2 -translate-x-1/2 text-xs leading-none">{"\uD83D\uDC51"}</span>
-                    )}
-
-                    <span className="text-2xl font-black leading-none" style={{ color: "var(--c-card-text)" }}>
+                    {/* Table number — RSRV typography */}
+                    <span className="text-[13px] font-bold tracking-tight leading-none" style={{ color: st.text }}>
                       {t.name}
                     </span>
 
-                    {/* Reservation customer name on table card */}
+                    {/* Capacity — icon + number */}
+                    <span className="flex items-center gap-0.5 mt-0.5">
+                      <svg className="w-2.5 h-2.5" style={{ color: st.muted }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                        <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                      </svg>
+                      <span className="text-[10px] font-medium" style={{ color: st.muted }}>{t.capacity}</span>
+                    </span>
+
+                    {/* Reservation info on table */}
                     {tblRsrv && !isOccupied && (
                       <span
-                        className="text-[10px] leading-none max-w-[80px] truncate font-semibold"
+                        className="text-[10px] leading-none max-w-[80px] truncate font-semibold mt-0.5"
                         style={{ color: tblLate ? "#f87171" : "#60a5fa" }}
                       >
                         {lastName(tblRsrv.customer_name)} {tblRsrv.reservation_time.slice(0, 5)}
@@ -1275,18 +1262,37 @@ export default function TablesPage() {
                       </span>
                     )}
 
+                    {/* Kitchen status — compact */}
+                    {kitchenSt && !isPendingMove && !isBillFlash && (
+                      <span className="absolute bottom-0.5 left-0.5 text-[10px] leading-none">
+                        {kitchenSt === "done" ? "\u2705" : "\uD83C\uDF73"}
+                      </span>
+                    )}
+
+                    {/* Order total badge */}
+                    {total !== undefined && (
+                      <span className="text-[9px] font-semibold mt-0.5 tracking-tight" style={{ color: st.muted }}>
+                        {total.toFixed(2)}{"\u20AC"}
+                      </span>
+                    )}
+
+                    {/* Bill pending */}
+                    {isPendingBill && !isBillFlash && (
+                      <span className="absolute bottom-0.5 right-0.5 w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                    )}
+
                     {/* Pending move overlay */}
                     {isPendingMove && (
-                      <div className="absolute inset-0 bg-amber-900/70 rounded-3xl flex flex-col items-center justify-center">
-                        <span className="text-2xl leading-none">{"\u23F3"}</span>
-                        <span className="text-xs font-semibold mt-1" style={{ color: "#fcd34d" }}>{"\u0391\u03BD\u03B1\u03BC\u03AD\u03BD\u03B5\u03C4\u03B1\u03B9..."}</span>
+                      <div className="absolute inset-0 bg-amber-900/70 rounded-md flex flex-col items-center justify-center">
+                        <span className="text-lg leading-none">{"\u23F3"}</span>
+                        <span className="text-[9px] font-semibold mt-0.5" style={{ color: "#fcd34d" }}>{"\u0391\u03BD\u03B1\u03BC\u03BF\u03BD\u03AE"}</span>
                       </div>
                     )}
 
                     {/* Denied overlay */}
                     {isDenied && (
-                      <div className="absolute inset-0 bg-red-900/70 rounded-3xl flex flex-col items-center justify-center">
-                        <span className="text-sm font-bold" style={{ color: "#fca5a5" }}>{"\u2717 \u0391\u03C0\u03BF\u03C1\u03C1\u03AF\u03C6\u03B8\u03B7\u03BA\u03B5"}</span>
+                      <div className="absolute inset-0 bg-red-900/70 rounded-md flex flex-col items-center justify-center">
+                        <span className="text-[10px] font-bold" style={{ color: "#fca5a5" }}>{"\u2717"}</span>
                       </div>
                     )}
                   </button>
@@ -1880,7 +1886,7 @@ export default function TablesPage() {
                   </p>
                   <div className="grid grid-cols-5 gap-2 max-h-[40vh] overflow-y-auto rounded-xl p-1">
                     {noMatchSuggestions.map((t) => {
-                      const st = STATUS_BG[t.status] ?? STATUS_BG.free;
+                      const st = getStatusStyle(t.status, theme === "dark" || theme === "grey");
                       return (
                         <button
                           key={t.id}
