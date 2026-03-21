@@ -6,8 +6,10 @@ import {
   lookupWaiterByPin,
   lookupWaiterByQrToken,
   fetchProfilesForVenue,
+  fetchSiblingVenues,
   startShift,
   WaiterProfile,
+  SiblingVenue,
 } from "@/lib/supabase";
 import QRScanner from "@/components/QRScanner";
 import type { DbWaiterProfile } from "@/lib/waiterDb";
@@ -56,14 +58,27 @@ export default function LoginPage() {
   const [setupError, setSetupError] = useState("");
   const [setupScanning, setSetupScanning] = useState(true);
 
+  // Multi-venue picker state
+  const [siblingVenues, setSiblingVenues] = useState<SiblingVenue[]>([]);
+  const [showVenuePicker, setShowVenuePicker] = useState(false);
+  const [scannedVenueId, setScannedVenueId] = useState<string | null>(null);
+
   useEffect(() => {
     if (waiter) router.replace("/tables");
   }, [waiter, router]);
 
-  // Fetch profiles when venue is set
+  // When venue is set: check for siblings, then fetch profiles
   useEffect(() => {
-    if (!deviceVenueId) { setProfiles([]); return; }
+    if (!deviceVenueId) { setProfiles([]); setSiblingVenues([]); return; }
     setProfilesLoading(true);
+    // Check for sibling venues in parallel with profile fetch
+    void fetchSiblingVenues(deviceVenueId).then((siblings) => {
+      if (siblings.length > 1 && !scannedVenueId) {
+        // First time — show the picker
+        setSiblingVenues(siblings);
+        setShowVenuePicker(true);
+      }
+    });
     fetchProfilesForVenue(deviceVenueId).then((p) => {
       setProfiles(p);
       setProfilesLoading(false);
@@ -73,21 +88,30 @@ export default function LoginPage() {
   // ── Device Setup QR scan ──────────────────────────────────────────
   const handleDeviceSetupScan = useCallback((raw: string) => {
     const val = raw.trim();
+    let venueUUID: string | null = null;
     if (isUUID(val)) {
-      setDeviceVenueId(val);
+      venueUUID = val;
+    } else {
+      try {
+        const url = new URL(val);
+        venueUUID = url.pathname.split("/").find(p => isUUID(p)) || null;
+      } catch { /* not a URL */ }
+    }
+    if (venueUUID) {
+      setScannedVenueId(venueUUID);
       setSetupScanning(false);
+      // Check siblings before committing
+      void fetchSiblingVenues(venueUUID).then((siblings) => {
+        if (siblings.length > 1) {
+          setSiblingVenues(siblings);
+          setShowVenuePicker(true);
+        } else {
+          setDeviceVenueId(venueUUID!);
+        }
+      });
       return;
     }
-    try {
-      const url = new URL(val);
-      const pathUUID = url.pathname.split("/").find(p => isUUID(p));
-      if (pathUUID) {
-        setDeviceVenueId(pathUUID);
-        setSetupScanning(false);
-        return;
-      }
-    } catch { /* not a URL */ }
-    setSetupError("Μη έγκυρο QR. Σκανάρε το QR ρύθμισης από το EL-Loyal.");
+    setSetupError("\u039C\u03B7 \u03AD\u03B3\u03BA\u03C5\u03C1\u03BF QR. \u03A3\u03BA\u03B1\u03BD\u03AC\u03C1\u03B5 \u03C4\u03BF QR \u03C1\u03CD\u03B8\u03BC\u03B9\u03C3\u03B7\u03C2 \u03B1\u03C0\u03CC \u03C4\u03BF EL-Loyal.");
     setTimeout(() => { setSetupError(""); setSetupScanning(false); setSetupScanning(true); }, 2000);
   }, [setDeviceVenueId]);
 
@@ -154,6 +178,73 @@ export default function LoginPage() {
       }
     }
   }
+
+  // ── Render: Multi-venue picker ───────────────────────────────────
+  if (showVenuePicker && siblingVenues.length > 1) return (
+    <div style={{
+      minHeight: "100dvh", background: "var(--c-bg)",
+      display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", padding: "24px", gap: 20,
+    }}>
+      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, background: "var(--c-brand-glow)" }} />
+      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 20, width: "100%", maxWidth: 400 }}>
+        <div style={{ textAlign: "center" }}>
+          <WaiterLogo size={56} />
+          <p style={{ color: "var(--c-text)", fontSize: 20, fontWeight: 700, marginTop: 8 }}>
+            {"\u0395\u03C0\u03B9\u03BB\u03BF\u03B3\u03AE \u039A\u03B1\u03C4\u03B1\u03C3\u03C4\u03AE\u03BC\u03B1\u03C4\u03BF\u03C2"}
+          </p>
+          <p style={{ color: "var(--c-text2)", fontSize: 14, marginTop: 4 }}>
+            {"\u03A0\u03BF\u03B9\u03BF \u03BA\u03B1\u03C4\u03AC\u03C3\u03C4\u03B7\u03BC\u03B1 \u03B4\u03BF\u03C5\u03BB\u03B5\u03CD\u03B5\u03B9\u03C2 \u03C3\u03AE\u03BC\u03B5\u03C1\u03B1;"}
+          </p>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, width: "100%" }}>
+          {siblingVenues.map((v) => (
+            <button
+              key={v.id}
+              onClick={() => {
+                setDeviceVenueId(v.id);
+                setShowVenuePicker(false);
+                setScannedVenueId(v.id);
+              }}
+              style={{
+                width: "100%",
+                minHeight: 72,
+                borderRadius: 16,
+                background: "var(--c-surface)",
+                border: "2px solid var(--c-border)",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "16px 20px",
+                transition: "transform 0.1s, border-color 0.15s",
+                WebkitTapHighlightColor: "transparent",
+                boxShadow: "var(--c-num-shadow)",
+              }}
+              onTouchStart={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(0.97)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "#3B82F6"; }}
+              onTouchEnd={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = "scale(1)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--c-border)"; }}
+            >
+              <div style={{ textAlign: "left" }}>
+                <p style={{ color: "var(--c-text)", fontSize: 16, fontWeight: 700 }}>{v.name}</p>
+                <p style={{ color: "var(--c-text2)", fontSize: 12, marginTop: 2 }}>
+                  {v.table_count > 0 ? `${v.table_count} \u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9\u03B1` : "Takeaway only"}
+                </p>
+              </div>
+              <span style={{ fontSize: 20, color: "var(--c-text3)" }}>{"\u203A"}</span>
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={() => { setShowVenuePicker(false); setScannedVenueId(null); setDeviceVenueId(null); }}
+          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--c-text3)", fontSize: 13, textDecoration: "underline" }}
+        >
+          {"\u2190 \u03A3\u03BA\u03B1\u03BD\u03AC\u03C1\u03B9\u03C3\u03BC\u03B1 \u03AC\u03BB\u03BB\u03BF\u03C5 QR"}
+        </button>
+      </div>
+    </div>
+  );
 
   // ── Render: Device Setup ──────────────────────────────────────────
   if (!deviceVenueId) return (

@@ -59,6 +59,42 @@ export interface WaiterProfile {
   sort_order: number;
 }
 
+export interface SiblingVenue {
+  id: string;
+  name: string;
+  table_count: number;
+}
+
+/** Given a venue ID, find all sibling venues (same owner_email) */
+export async function fetchSiblingVenues(venueId: string): Promise<SiblingVenue[]> {
+  if (!supabase) return [];
+  // Get the owner_email for this venue
+  const { data: venue } = await supabase
+    .from("venues")
+    .select("owner_email")
+    .eq("id", venueId)
+    .single();
+  if (!venue?.owner_email) return [];
+  // Find all venues with the same owner_email
+  const { data: siblings } = await supabase
+    .from("venues")
+    .select("id, name")
+    .eq("owner_email", venue.owner_email)
+    .eq("active", true)
+    .order("name");
+  if (!siblings || siblings.length <= 1) return []; // No siblings → no picker needed
+  // Get table counts for each
+  const withCounts: SiblingVenue[] = [];
+  for (const s of siblings) {
+    const { count } = await supabase
+      .from("pos_tables")
+      .select("id", { count: "exact", head: true })
+      .eq("venue_id", s.id);
+    withCounts.push({ id: s.id, name: s.name, table_count: count ?? 0 });
+  }
+  return withCounts;
+}
+
 export async function lookupWaiterByPin(venueId: string, pin: string): Promise<WaiterProfile | null> {
   if (!supabase) return null;
   const { data } = await supabase
