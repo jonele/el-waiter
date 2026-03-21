@@ -5,7 +5,7 @@ import { waiterDb, getOpenOrder, calcTotal } from "@/lib/waiterDb";
 import { useWaiterStore } from "@/store/waiterStore";
 import { supabase, decodeUnicodeEscapes } from "@/lib/supabase";
 import { v4 as uuidv4 } from "uuid";
-import type { DbMenuCategory, DbMenuItem, DbOrderItem, DbOrder, DbTable } from "@/lib/waiterDb";
+import type { DbMenuCategory, DbMenuItem, DbOrderItem, DbOrder, DbTable, OrderItemModifier } from "@/lib/waiterDb";
 
 // Virtual table for takeaway orders
 const TAKEAWAY_TABLE: DbTable = {
@@ -72,6 +72,21 @@ function OrderPageInner() {
   const [tab, setTab] = useState<"menu" | "cart">("menu");
   const [activeSeat, setActiveSeat] = useState<number | null>(null);
 
+  // Modifier state
+  interface ModifierGroup {
+    id: string;
+    name: string;
+    display_name: string;
+    selection_type: "single" | "multi";
+    is_required: boolean;
+    sort_order: number;
+    options: { id: string; name: string; code: string; price_modifier: number; sort_order: number }[];
+  }
+  const [modifierGroups, setModifierGroups] = useState<ModifierGroup[]>([]);
+  const [modifierItem, setModifierItem] = useState<DbMenuItem | null>(null);
+  const [modifierSelections, setModifierSelections] = useState<Record<string, string[]>>({});
+  const [categoryModGroupIds, setCategoryModGroupIds] = useState<Record<string, string[]>>({});
+
   // Check if this is a takeaway order
   const isTakeaway = searchParams.get("takeaway") === "1";
   const activeTable = isTakeaway ? { ...TAKEAWAY_TABLE, venue_id: waiter?.venue_id || "" } : storeTable;
@@ -101,15 +116,45 @@ function OrderPageInner() {
 
     // Always fetch fresh from Supabase when online
     if (isOnline && supabase && vid) {
-      const [{ data: dbCats }, { data: dbItems }] = await Promise.all([
+      const [{ data: dbCats }, { data: dbItems }, { data: dbGroups }, { data: dbMods }, { data: dbGroupCats }] = await Promise.all([
         supabase.from("menu_categories").select("*").eq("venue_id", vid).eq("is_active", true),
         supabase.from("menu_items").select("*").eq("venue_id", vid).eq("is_active", true).eq("is_available", true),
+        supabase.from("pos_modifier_groups").select("*").eq("venue_id", vid).eq("is_active", true).order("sort_order"),
+        supabase.from("pos_modifiers").select("*").eq("venue_id", vid).eq("is_active", true).order("sort_order"),
+        supabase.from("pos_modifier_group_categories").select("*").eq("venue_id", vid),
       ]);
       if (dbCats) await waiterDb.menuCategories.bulkPut(dbCats);
       if (dbItems) await waiterDb.menuItems.bulkPut(dbItems);
       const freshCats = await waiterDb.menuCategories.where("venue_id").equals(vid).sortBy("sort_order");
       activeCats = freshCats.filter((c) => c.is_active);
       setCategories(activeCats);
+
+      // Build modifier groups with their options
+      if (dbGroups && dbMods) {
+        const groups: ModifierGroup[] = dbGroups.map((g) => ({
+          id: g.id,
+          name: g.name,
+          display_name: g.display_name,
+          selection_type: g.selection_type as "single" | "multi",
+          is_required: g.is_required,
+          sort_order: g.sort_order,
+          options: (dbMods || [])
+            .filter((m) => m.group_id === g.id)
+            .map((m) => ({ id: m.id, name: m.name, code: m.code, price_modifier: Number(m.price_modifier) || 0, sort_order: m.sort_order }))
+            .sort((a, b) => a.sort_order - b.sort_order),
+        }));
+        setModifierGroups(groups);
+      }
+
+      // Build category → modifier group mapping
+      if (dbGroupCats) {
+        const catMap: Record<string, string[]> = {};
+        for (const gc of dbGroupCats) {
+          if (!catMap[gc.category_id]) catMap[gc.category_id] = [];
+          catMap[gc.category_id].push(gc.group_id);
+        }
+        setCategoryModGroupIds(catMap);
+      }
     }
 
     // Set first category and load its items immediately
@@ -154,28 +199,87 @@ function OrderPageInner() {
     return orderItems.filter((o) => o.menu_item_id === menuItemId).reduce((s, o) => s + o.quantity, 0);
   }
 
-  function addItem(item: DbMenuItem) {
+  // Check if item's category has modifier groups
+  function getItemModGroups(item: DbMenuItem): ModifierGroup[] {
+    const groupIds = categoryModGroupIds[item.category_id] || [];
+    if (groupIds.length === 0) return [];
+    return modifierGroups.filter((g) => groupIds.includes(g.id));
+  }
+
+  function handleItemTap(item: DbMenuItem) {
+    const groups = getItemModGroups(item);
+    if (groups.length > 0) {
+      // Has modifiers — show the bottom sheet
+      setModifierItem(item);
+      setModifierSelections({});
+    } else {
+      // No modifiers — instant add
+      addItemDirect(item);
+    }
+  }
+
+  function addItemDirect(item: DbMenuItem, mods?: OrderItemModifier[]) {
     setOrderItems((prev) => {
-      // Group by item + seat combination so same item for different seats stays separate
-      const existing = prev.find(
-        (o) => o.menu_item_id === item.id && (o.seat ?? null) === activeSeat
-      );
-      if (existing) {
-        return prev.map((o) =>
-          o.menu_item_id === item.id && (o.seat ?? null) === activeSeat
-            ? { ...o, quantity: o.quantity + 1 }
-            : o
+      // If no modifiers, try to increment existing
+      if (!mods || mods.length === 0) {
+        const existing = prev.find(
+          (o) => o.menu_item_id === item.id && (o.seat ?? null) === activeSeat && (!o.modifiers || o.modifiers.length === 0)
         );
+        if (existing) {
+          return prev.map((o) =>
+            o.id === existing.id ? { ...o, quantity: o.quantity + 1 } : o
+          );
+        }
       }
+      const modExtra = (mods || []).reduce((s, m) => s + m.price_modifier, 0);
+      const modNotes = (mods || []).map((m) => m.name + (m.price_modifier > 0 ? ` +${m.price_modifier.toFixed(2)}€` : "")).join(", ");
       const newItem: DbOrderItem = {
         id: uuidv4(),
         menu_item_id: item.id,
         name: item.name,
         price: item.price,
         quantity: 1,
+        modifiers: mods,
+        notes: modNotes || undefined,
       };
       if (activeSeat !== null) newItem.seat = activeSeat;
       return [...prev, newItem];
+    });
+  }
+
+  function confirmModifiers() {
+    if (!modifierItem) return;
+    const groups = getItemModGroups(modifierItem);
+    // Check required groups
+    for (const g of groups) {
+      if (g.is_required && (!modifierSelections[g.id] || modifierSelections[g.id].length === 0)) {
+        return; // Don't close — required group not selected
+      }
+    }
+    // Build modifier list
+    const mods: OrderItemModifier[] = [];
+    for (const g of groups) {
+      const selected = modifierSelections[g.id] || [];
+      for (const optId of selected) {
+        const opt = g.options.find((o) => o.id === optId);
+        if (opt) {
+          mods.push({ group_name: g.display_name, name: opt.name, code: opt.code, price_modifier: opt.price_modifier });
+        }
+      }
+    }
+    addItemDirect(modifierItem, mods);
+    setModifierItem(null);
+    setModifierSelections({});
+  }
+
+  function toggleModifier(groupId: string, optionId: string, selectionType: "single" | "multi") {
+    setModifierSelections((prev) => {
+      const current = prev[groupId] || [];
+      if (selectionType === "single") {
+        return { ...prev, [groupId]: current.includes(optionId) ? [] : [optionId] };
+      }
+      // Multi
+      return { ...prev, [groupId]: current.includes(optionId) ? current.filter((id) => id !== optionId) : [...current, optionId] };
     });
   }
 
@@ -443,7 +547,7 @@ function OrderPageInner() {
                 return (
                   <button
                     key={item.id}
-                    onClick={() => addItem(item)}
+                    onClick={() => handleItemTap(item)}
                     className={`relative flex flex-col rounded-2xl p-3 text-left min-h-[80px] transition-all active:scale-95 duration-75
                       ${qty > 0 ? "border border-brand/50 bg-brand/10" : ""}`}
                     style={qty === 0 ? { background: "var(--c-surface2)" } : {}}
@@ -589,6 +693,108 @@ function OrderPageInner() {
           )}
         </div>
       )}
+      {/* Modifier bottom sheet */}
+      {modifierItem && (() => {
+        const groups = getItemModGroups(modifierItem);
+        const modExtra = Object.entries(modifierSelections).reduce((total, [gid, optIds]) => {
+          const group = groups.find((g) => g.id === gid);
+          if (!group) return total;
+          return total + optIds.reduce((s, oid) => {
+            const opt = group.options.find((o) => o.id === oid);
+            return s + (opt?.price_modifier || 0);
+          }, 0);
+        }, 0);
+        const allRequiredMet = groups.filter((g) => g.is_required).every((g) => (modifierSelections[g.id]?.length || 0) > 0);
+        const itemTotal = modifierItem.price + modExtra;
+
+        return (
+          <div
+            className="fixed inset-0 z-50 flex flex-col justify-end"
+            onClick={(e) => { if (e.target === e.currentTarget) { setModifierItem(null); setModifierSelections({}); } }}
+            style={{ background: "rgba(0,0,0,0.5)" }}
+          >
+            <div
+              className="rounded-t-3xl px-4 pt-5 pb-safe max-h-[85vh] overflow-y-auto"
+              style={{
+                background: "var(--c-surface)",
+                borderTop: "1px solid var(--c-border)",
+                animation: "slideUp 0.2s ease-out",
+              }}
+            >
+              {/* Item header */}
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <p className="text-lg font-black" style={{ color: "var(--c-text)" }}>{decodeUnicodeEscapes(modifierItem.name)}</p>
+                  <p className="text-sm font-semibold" style={{ color: "var(--brand, #3B82F6)" }}>{modifierItem.price.toFixed(2)}{"\u20AC"}</p>
+                </div>
+                <button
+                  onClick={() => { setModifierItem(null); setModifierSelections({}); }}
+                  className="w-10 h-10 rounded-full flex items-center justify-center transition-transform active:scale-90"
+                  style={{ background: "var(--c-surface2)", color: "var(--c-text3)" }}
+                >
+                  {"\u2715"}
+                </button>
+              </div>
+
+              {/* Modifier groups */}
+              {groups.map((g) => (
+                <div key={g.id} className="mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <p className="text-xs font-bold uppercase tracking-wide" style={{ color: "var(--c-text3)" }}>
+                      {g.display_name}
+                    </p>
+                    {g.is_required && (
+                      <span className="text-[10px] font-bold px-1.5 py-0.5 rounded" style={{
+                        background: (modifierSelections[g.id]?.length || 0) > 0 ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)",
+                        color: (modifierSelections[g.id]?.length || 0) > 0 ? "#22c55e" : "#ef4444",
+                      }}>
+                        {(modifierSelections[g.id]?.length || 0) > 0 ? "\u2713" : "\u0391\u03C0\u03B1\u03B9\u03C4\u03B5\u03AF\u03C4\u03B1\u03B9"}
+                      </span>
+                    )}
+                    <span className="text-[10px]" style={{ color: "var(--c-text3)" }}>
+                      {g.selection_type === "single" ? "(\u03AD\u03BD\u03B1)" : "(\u03C0\u03BF\u03BB\u03BB\u03B1\u03C0\u03BB\u03AC)"}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {g.options.map((opt) => {
+                      const isSelected = (modifierSelections[g.id] || []).includes(opt.id);
+                      return (
+                        <button
+                          key={opt.id}
+                          onClick={() => toggleModifier(g.id, opt.id, g.selection_type)}
+                          className="rounded-xl px-4 py-3 text-sm font-semibold transition-all active:scale-95 border-2"
+                          style={{
+                            background: isSelected ? "rgba(59,130,246,0.15)" : "var(--c-surface2)",
+                            borderColor: isSelected ? "var(--brand, #3B82F6)" : "var(--c-border)",
+                            color: isSelected ? "var(--brand, #3B82F6)" : "var(--c-text)",
+                          }}
+                        >
+                          {opt.name}
+                          {opt.price_modifier > 0 && (
+                            <span className="ml-1 text-xs" style={{ color: "var(--c-text2)" }}>
+                              +{opt.price_modifier.toFixed(2)}{"\u20AC"}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+
+              {/* Add button */}
+              <button
+                onClick={confirmModifiers}
+                disabled={!allRequiredMet}
+                className="w-full rounded-2xl h-16 font-black text-white text-lg transition-transform active:scale-[0.97] disabled:opacity-30 mb-2"
+                style={{ background: allRequiredMet ? "var(--brand, #3B82F6)" : "var(--c-surface2)" }}
+              >
+                {"\u03A0\u03A1\u039F\u03A3\u0398\u0397\u039A\u0397"} {itemTotal.toFixed(2)}{"\u20AC"}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

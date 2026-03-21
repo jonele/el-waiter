@@ -23,6 +23,7 @@ export type {
   DbSyncItem,
   DbFailedSyncItem,
   PaymentMethod,
+  OrderItemModifier,
   UnifiedDb,
   RsrvReservation,
   WaitlistEntry,

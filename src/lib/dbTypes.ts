@@ -59,6 +59,13 @@ export interface DbMenuItem {
   sort_order: number;
 }
 
+export interface OrderItemModifier {
+  group_name: string;
+  name: string;
+  code: string;
+  price_modifier: number;
+}
+
 export interface DbOrderItem {
   id: string;
   menu_item_id: string;
@@ -67,6 +74,7 @@ export interface DbOrderItem {
   quantity: number;
   notes?: string;
   seat?: number;
+  modifiers?: OrderItemModifier[];
 }
 
 export type PaymentMethod = "cash" | "card_lan" | "card_bt" | "preorder";
@@ -109,7 +117,10 @@ export interface DbFailedSyncItem {
 }
 
 export function calcTotal(items: DbOrderItem[]): number {
-  return items.reduce((s, i) => s + i.price * i.quantity, 0);
+  return items.reduce((s, i) => {
+    const modExtra = (i.modifiers || []).reduce((ms, m) => ms + m.price_modifier, 0);
+    return s + (i.price + modExtra) * i.quantity;
+  }, 0);
 }
 
 // ---------------------------------------------------------------------------
