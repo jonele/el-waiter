@@ -259,8 +259,9 @@ export default function PayPage() {
         // More splits needed
         setResult("success");
       }
-    } catch {
+    } catch (err) {
       setResult("fail");
+      setStatusMsg(`\u0391\u03C0\u03BF\u03C4\u03C5\u03C7\u03AF\u03B1: ${err instanceof Error ? err.message : "\u0395\u03BB\u03AD\u03B3\u03BE\u03C4\u03B5 \u03C3\u03CD\u03BD\u03B4\u03B5\u03C3\u03B7"}`);
     }
     setProcessing(false);
   }

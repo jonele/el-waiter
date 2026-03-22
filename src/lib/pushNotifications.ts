@@ -27,7 +27,7 @@ export async function registerPushNotifications(waiterId?: string, venueId?: str
 
     PushNotifications.addListener("pushNotificationReceived", (notification) => {
       // Foreground notification — handled by presentationOptions in capacitor.config.ts
-      console.log("Push received:", notification.title);
+      void notification.title; // foreground push — handled by presentationOptions
     });
 
     PushNotifications.addListener("pushNotificationActionPerformed", (action) => {

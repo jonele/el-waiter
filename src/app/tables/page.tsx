@@ -244,7 +244,11 @@ export default function TablesPage() {
         }
         // Show sheet AFTER data is loaded
         setShowNoMatch(true);
-      })();
+      })().catch(() => {
+        setSyncError("\u0391\u03C0\u03BF\u03C4\u03C5\u03C7\u03AF\u03B1 \u03C6\u03CC\u03C1\u03C4\u03C9\u03C3\u03B7\u03C2 \u03C4\u03C1\u03B1\u03C0\u03B5\u03B6\u03B9\u03CE\u03BD");
+        setTimeout(() => setSyncError(null), 4000);
+        setShowNoMatch(true); // still show sheet with whatever we have
+      });
     } else {
       // No Supabase — show sheet with whatever we have
       setShowNoMatch(true);
@@ -304,9 +308,12 @@ export default function TablesPage() {
         const data = await r.json();
         setReservations(Array.isArray(data) ? data : (data.reservations ?? []));
       }
-    } catch { /* offline — keep stale */ }
+    } catch {
+      if (isOnline) setSyncError("\u0391\u03C0\u03BF\u03C4\u03C5\u03C7\u03AF\u03B1 \u03C6\u03CC\u03C1\u03C4\u03C9\u03C3\u03B7\u03C2 \u03BA\u03C1\u03B1\u03C4\u03AE\u03C3\u03B5\u03C9\u03BD");
+      setTimeout(() => setSyncError(null), 4000);
+    }
     setRsrvLoading(false);
-  }, [venueId]);
+  }, [venueId, isOnline]);
 
   // ---------- Waitlist fetch ----------
   const fetchWaitlist = useCallback(async () => {
@@ -318,7 +325,10 @@ export default function TablesPage() {
         const data = await r.json();
         setWaitlist(Array.isArray(data) ? data : (data.waitlist ?? []));
       }
-    } catch { /* offline */ }
+    } catch {
+      if (isOnline) setSyncError("\u0391\u03C0\u03BF\u03C4\u03C5\u03C7\u03AF\u03B1 \u03C6\u03CC\u03C1\u03C4\u03C9\u03C3\u03B7\u03C2 \u03BB\u03AF\u03C3\u03C4\u03B1\u03C2 \u03B1\u03BD\u03B1\u03BC\u03BF\u03BD\u03AE\u03C2");
+      setTimeout(() => setSyncError(null), 4000);
+    }
     setWaitLoading(false);
   }, [venueId]);
 
@@ -646,7 +656,10 @@ export default function TablesPage() {
       }
       // Refresh reservations to show the new walk-in
       void fetchReservations();
-    } catch { /* keep sheet open */ }
+    } catch {
+      setSyncError("\u0391\u03C0\u03BF\u03C4\u03C5\u03C7\u03AF\u03B1 \u03BA\u03B1\u03C4\u03B1\u03C7\u03CE\u03C1\u03B7\u03C3\u03B7\u03C2 walk-in");
+      setTimeout(() => setSyncError(null), 4000);
+    }
     setWiSubmitting(false);
   }
 
@@ -766,8 +779,7 @@ export default function TablesPage() {
     setTheme(next);
   }
 
-  // Suppress unused var warnings
-  void pendingMoveId;
+  void pendingMoveId; // used in move request subscription
 
   return (
     <div className="flex h-screen flex-col" style={{ background: "var(--c-bg)" }}>

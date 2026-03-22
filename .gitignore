@@ -8,3 +8,9 @@ out/
 
 # Tauri
 src-tauri/target/
+
+# Editor duplicates
+*\ 2.*
+*\ 3.*
+dist/
+test-results/
