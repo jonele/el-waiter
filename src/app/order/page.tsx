@@ -737,6 +737,7 @@ function OrderPageInner() {
                   onClick={() => { setModifierItem(null); setModifierSelections({}); }}
                   className="w-10 h-10 rounded-full flex items-center justify-center transition-transform active:scale-90"
                   style={{ background: "var(--c-surface2)", color: "var(--c-text3)" }}
+                  aria-label="Κλείσιμο"
                 >
                   {"\u2715"}
                 </button>

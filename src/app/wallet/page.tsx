@@ -84,7 +84,7 @@ export default function WalletPage() {
       <div className="pt-safe bg-gray-900 border-b border-gray-800 px-4 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <button onClick={() => router.push("/tables")} className="text-gray-400 text-xl touch-btn">←</button>
+            <button onClick={() => router.push("/tables")} className="text-gray-400 text-xl touch-btn" aria-label="Πίσω">←</button>
             <div>
               <p className="font-bold text-white">Πορτοφόλι</p>
               <p className="text-xs text-gray-400">{waiter?.name}</p>

@@ -204,7 +204,20 @@ export async function drainSyncQueue(
 
   for (const item of items) {
     try {
-      await processItem(supabase, db, item);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15_000);
+      try {
+        await Promise.race([
+          processItem(supabase, db, item),
+          new Promise<never>((_, reject) => {
+            controller.signal.addEventListener("abort", () =>
+              reject(new Error("sync_timeout"))
+            );
+          }),
+        ]);
+      } finally {
+        clearTimeout(timeout);
+      }
 
       // Success — remove from queue
       if (item.id !== undefined) {

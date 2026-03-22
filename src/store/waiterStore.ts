@@ -74,8 +74,15 @@ export const useWaiterStore = create<WaiterState>()(
     }),
     {
       name:    "el-waiter",
+      version: 1,
       storage: createJSONStorage(() => localStorage),
       partialize: (s) => ({ waiter: s.waiter, settings: s.settings, theme: s.theme, deviceVenueId: s.deviceVenueId, currentShiftId: s.currentShiftId, venueConfig: s.venueConfig }),
+      migrate: (persisted, version) => {
+        if (version === 0) {
+          // v0 -> v1: no-op, initial version
+        }
+        return persisted as WaiterState;
+      },
     }
   )
 );

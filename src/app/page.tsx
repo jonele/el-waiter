@@ -401,6 +401,7 @@ export default function LoginPage() {
               key={i}
               onClick={() => handleNum(v)}
               disabled={loading || (!v && v !== "0")}
+              aria-label={v === "⌫" ? "Διαγραφή" : v || undefined}
               style={{
                 minHeight: 64, borderRadius: 18, fontSize: 24, fontWeight: 600,
                 border: "none", cursor: v || v === "0" ? "pointer" : "default",

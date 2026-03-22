@@ -1,4 +1,57 @@
 
+## 2026-03-23 — EL-Waiter v2.4.0: Production Hardening + Premium UI
+
+### Premium RSRV-Style Table Cards
+- Gradient backgrounds per status (not flat colors)
+- Dual-layer shadows (outer + inset highlight)
+- 1.5px thin borders, rounded-md (not thick 3px rounded-3xl)
+- Status indicator dot with white ring offset
+- Micro-typography hierarchy (8/10/11/13px)
+- Capacity icon (users SVG) with muted text
+- 3/4/5 column responsive grid
+- Dark/light/beach mode aware
+
+### Multi-Venue Picker
+- QR scan → if owner has sibling venues → picker screen
+- "Ποιο κατάστημα δουλεύεις σήμερα?" with table counts
+- Niceneasy Bistro / Coffee venue selection working
+
+### Item Modifier System
+- pos_modifier_groups + pos_modifiers schema
+- Bottom sheet when tapping items with modifiers (coffee → sweetness/milk/extras)
+- Single-select (required) and multi-select groups
+- Price extras calculated live, shown in cart before firing
+
+### Table Validation + Splitting
+- Keypad validates table numbers against DB
+- No-match → shows ALL venue tables from Supabase
+- Split tables: 108 → 108A, 108B (created in Supabase + local DB)
+
+### Production Hardening
+- ErrorBoundary: catches crashes, Greek error page + reload
+- useVenueId hook: single source of truth
+- Sync error toasts: red banner on failures (4s auto-dismiss)
+- Service worker: checks updates every 5min, auto-reloads
+- Pay page: error messages now show reason
+- Removed dead BottomNav, junk config files
+- RLS policies added for pos_tables + pos_floor_sections
+- Aria-labels, Zustand migration, sync timeouts
+- Playwright E2E: 9/9 tests passing against production
+
+### Supabase Changes
+- Created Bar + Main sections for Niceneasy Bistro
+- RLS read policies on pos_tables, pos_floor_sections, pos_modifier_groups
+- 17 coffee modifiers seeded (sweetness, milk, extras, temperature, size)
+
+### UI Cleanup
+- Removed bottom navigation bar (header-only navigation)
+- Wallet moved inside Settings
+- Search bar removed (keypad handles search)
+- Default view: tables grid (not keypad)
+- View toggle: # / 🍽️ Τραπέζια / Ανοιχτά
+
+---
+
 ## 2026-03-21 — EL-Waiter v2.1.0: Beach Club Architecture
 
 ### Phase 1: "Classic Beach" Theme

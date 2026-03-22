@@ -261,7 +261,16 @@ export default function PayPage() {
       }
     } catch (err) {
       setResult("fail");
-      setStatusMsg(`\u0391\u03C0\u03BF\u03C4\u03C5\u03C7\u03AF\u03B1: ${err instanceof Error ? err.message : "\u0395\u03BB\u03AD\u03B3\u03BE\u03C4\u03B5 \u03C3\u03CD\u03BD\u03B4\u03B5\u03C3\u03B7"}`);
+      const code = err instanceof Error ? err.message : "";
+      const ERROR_LABELS: Record<string, string> = {
+        bridge_fail: "Αποτυχία σύνδεσης με τερματικό",
+        aade_blocked: "Απόρριψη από ΑΑΔΕ — δοκιμάστε ξανά",
+        charge_failed: "Αποτυχία χρέωσης",
+        timeout: "Λήξη χρόνου αναμονής",
+        no_terminal: "Δεν βρέθηκε τερματικό",
+      };
+      const label = ERROR_LABELS[code] ?? (code.startsWith("event_") ? `Σφάλμα τερματικού (${code})` : code || "Ελέγξτε σύνδεση");
+      setStatusMsg(`Αποτυχία: ${label}`);
     }
     setProcessing(false);
   }
@@ -400,7 +409,7 @@ export default function PayPage() {
       {/* Header */}
       <div className="pt-safe bg-gray-900 border-b border-gray-800 px-4 py-3">
         <div className="flex items-center gap-3">
-          <button onClick={() => router.back()} className="text-gray-400 text-xl touch-btn">←</button>
+          <button onClick={() => router.back()} className="text-gray-400 text-xl touch-btn" aria-label="Πίσω">←</button>
           <div className="flex-1">
             <p className="font-bold text-white">{activeTable?.name}</p>
             <p className="text-xs text-gray-400">Πληρωμή</p>

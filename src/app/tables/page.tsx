@@ -986,6 +986,7 @@ export default function TablesPage() {
                         onClick={() => { setKeypadInput(""); }}
                         className="w-7 h-7 rounded-full flex items-center justify-center text-xs transition-transform active:scale-90"
                         style={{ background: "var(--c-surface2)", color: "var(--c-text3)" }}
+                        aria-label="Καθαρισμός"
                       >
                         {"\u2715"}
                       </button>
@@ -996,6 +997,7 @@ export default function TablesPage() {
                       onClick={() => { setKeypadInput(""); }}
                       className="w-7 h-7 rounded-full flex items-center justify-center text-xs transition-transform active:scale-90"
                       style={{ background: "var(--c-surface2)", color: "var(--c-text3)" }}
+                      aria-label="Καθαρισμός"
                     >
                       {"\u2715"}
                     </button>
@@ -1194,6 +1196,7 @@ export default function TablesPage() {
                         className="absolute top-0.5 left-0.5 w-6 h-6 rounded flex items-center justify-center text-[10px] font-bold transition-transform active:scale-90"
                         style={{ background: "rgba(245,158,11,0.25)", color: "#fbbf24" }}
                         onClick={(e) => { e.stopPropagation(); setMoveReqSource(t); }}
+                        aria-label="Μετακίνηση τραπεζιού"
                       >
                         {"\u21C4"}
                       </button>
@@ -1424,6 +1427,7 @@ export default function TablesPage() {
             onClick={() => setShowAddWaitlist(true)}
             className="fixed right-5 bottom-[calc(16px+env(safe-area-inset-bottom)+16px)] z-40 w-[60px] h-[60px] rounded-full flex items-center justify-center text-2xl font-bold transition-transform active:scale-90"
             style={{ background: "#3b82f6", color: "#fff", boxShadow: "0 4px 20px rgba(59,130,246,0.4)" }}
+            aria-label="Προσθήκη στην αναμονή"
           >
             +
           </button>
@@ -1459,6 +1463,7 @@ export default function TablesPage() {
                 className="w-10 h-10 flex items-center justify-center rounded-xl transition-opacity active:opacity-50"
                 style={{ color: "var(--c-text2)" }}
                 onClick={() => setSelectedRsrv(null)}
+                aria-label="Κλείσιμο"
               >{"\u2715"}</button>
             </div>
             {/* Info box */}
@@ -1569,6 +1574,7 @@ export default function TablesPage() {
                 className="w-10 h-10 flex items-center justify-center rounded-xl transition-opacity active:opacity-50"
                 style={{ color: "var(--c-text2)" }}
                 onClick={() => setWalkInTable(null)}
+                aria-label="Κλείσιμο"
               >{"\u2715"}</button>
             </div>
             <div className="px-4 py-4 flex flex-col gap-4">
@@ -1580,12 +1586,14 @@ export default function TablesPage() {
                     onClick={() => setWiSize(Math.max(1, wiSize - 1))}
                     className="w-[60px] h-[60px] rounded-2xl flex items-center justify-center text-2xl font-bold transition-transform active:scale-90"
                     style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
+                    aria-label="Λιγότερα άτομα"
                   >{"\u2212"}</button>
                   <span className="text-3xl font-black w-12 text-center" style={{ color: "var(--c-text)" }}>{wiSize}</span>
                   <button
                     onClick={() => setWiSize(wiSize + 1)}
                     className="w-[60px] h-[60px] rounded-2xl flex items-center justify-center text-2xl font-bold transition-transform active:scale-90"
                     style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
+                    aria-label="Περισσότερα άτομα"
                   >+</button>
                 </div>
               </div>
@@ -1686,6 +1694,7 @@ export default function TablesPage() {
                 className="w-10 h-10 flex items-center justify-center rounded-xl transition-opacity active:opacity-50"
                 style={{ color: "var(--c-text2)" }}
                 onClick={() => setShowAddWaitlist(false)}
+                aria-label="Κλείσιμο"
               >{"\u2715"}</button>
             </div>
             <div className="px-4 py-4 flex flex-col gap-4">
@@ -1704,12 +1713,14 @@ export default function TablesPage() {
                   onClick={() => setWlSize(Math.max(1, wlSize - 1))}
                   className="w-[60px] h-[60px] rounded-2xl flex items-center justify-center text-2xl font-bold transition-transform active:scale-90"
                   style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
+                  aria-label="Λιγότερα άτομα"
                 >{"\u2212"}</button>
                 <span className="text-3xl font-black w-12 text-center" style={{ color: "var(--c-text)" }}>{wlSize}</span>
                 <button
                   onClick={() => setWlSize(wlSize + 1)}
                   className="w-[60px] h-[60px] rounded-2xl flex items-center justify-center text-2xl font-bold transition-transform active:scale-90"
                   style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
+                  aria-label="Περισσότερα άτομα"
                 >+</button>
               </div>
               {/* Phone */}
@@ -1762,6 +1773,7 @@ export default function TablesPage() {
                 className="w-10 h-10 flex items-center justify-center rounded-xl transition-opacity active:opacity-50"
                 style={{ color: "var(--c-text2)" }}
                 onClick={() => setMoveReqSource(null)}
+                aria-label="Κλείσιμο"
               >{"\u2715"}</button>
             </div>
             {/* table grid */}
