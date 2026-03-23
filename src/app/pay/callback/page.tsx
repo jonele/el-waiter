@@ -64,11 +64,29 @@ function CallbackInner() {
       if (orderId) {
         await waiterDb.orders.update(orderId, {
           status: "paid",
-          payment_method: "card_lan",
+          payment_method: "softpos",
           paid_at: new Date().toISOString(),
           synced: true,
         });
       }
+
+      // Issue fiscal final receipt (11.1) via Bridge
+      const { settings } = useWaiterStore.getState();
+      const bridgeUrl = settings?.bridgeUrl || "http://localhost:8088";
+      void fetch(`${bridgeUrl}/api/v1/payments/viva/complete-receipt`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          merchant_reference: `ELW-${orderId.slice(-12)}`,
+          amount_cents: amountCents,
+          payment_method: "card",
+          items: [], // Items already on the 8.6 order slip
+          doc_type: "receipt",
+          previous_reference: `ELW-${orderId.slice(-12)}-slip`,
+          transaction_id: transactionId,
+        }),
+        signal: AbortSignal.timeout(15000),
+      }).catch(() => { /* fiscal not configured */ });
 
       setStatus("success");
       setMessage(

@@ -394,6 +394,39 @@ function OrderPageInner() {
               headers: { "Content-Type": "application/json" },
               signal: AbortSignal.timeout(10000),
             });
+
+            // 4. Issue 8.6 order slip (fiscal document, no payment yet)
+            // Greek law requires this for dine-in before final payment
+            void fetch(`${bridgeUrl}/api/v1/fiscal/order-ticket`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                order_id: newOrder.id,
+                bridge_order_id: bridgeOrderId,
+                table_id: activeTable.name,
+                waiter_name: waiter.name,
+                receipt_reference: `ELW-${newOrder.id.slice(-12)}-slip`,
+                items: bridgeItems.map((item, idx) => ({
+                  description: item.product_name,
+                  amount_cents: item.unit_price_cents * item.quantity,
+                  quantity: item.quantity * 100, // Viva uses x100
+                  vat_rate: 24,
+                  item_type: "goods",
+                  position: idx + 1,
+                })),
+              }),
+              signal: AbortSignal.timeout(15000),
+            }).catch(() => {
+              // Fiscal not configured or Bridge doesn't have endpoint yet
+              // Order still fires — fiscal is additive, not blocking
+            });
+
+            // Store bridge order ID for later fiscal final receipt
+            if (supabase) {
+              void supabase.from("kitchen_orders")
+                .update({ bridge_order_id: bridgeOrderId })
+                .eq("id", newOrder.id);
+            }
           }
         }
       } catch {

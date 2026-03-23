@@ -166,6 +166,40 @@ export default function PayPage() {
     await waiterDb.posTables.update(activeTable.id, { status: "free" });
     useWaiterStore.getState().setActiveTable({ ...activeTable, status: "free" });
     void supabase?.from("pos_tables").update({ status: "free" }).eq("id", activeTable.id);
+    void supabase?.from("kitchen_orders").update({ status: "paid" }).eq("id", order.id);
+
+    // Issue fiscal final receipt (11.1) via Bridge — links to 8.6 order slip
+    const bridgeUrl = settings.bridgeUrl || "http://localhost:8088";
+    const totalCents = Math.round(subtotal * 100);
+    const tipCents = Math.round((splitPayments.reduce((s, p) => s + p.tip, 0) + tip) * 100);
+    const paymentType = method === "cash" ? "cash" : "card";
+
+    void fetch(`${bridgeUrl}/api/v1/payments/viva/complete-receipt`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        merchant_reference: `ELW-${order.id.slice(-12)}`,
+        amount_cents: totalCents + tipCents,
+        payment_method: paymentType,
+        tip_cents: tipCents,
+        items: order.items.map((item, idx) => {
+          const modExtra = (item.modifiers || []).reduce((s, m) => s + m.price_modifier, 0);
+          return {
+            description: item.name,
+            amount_cents: Math.round((item.price + modExtra) * item.quantity * 100),
+            quantity: item.quantity * 100, // Viva uses x100
+            vat_rate: 24,
+            item_type: "goods",
+            position: idx + 1,
+          };
+        }),
+        doc_type: "receipt",
+        previous_reference: `ELW-${order.id.slice(-12)}-slip`, // Link to 8.6 order slip
+      }),
+      signal: AbortSignal.timeout(15000),
+    }).catch(() => {
+      // Fiscal not configured — payment is still recorded
+    });
   }
 
   // ── Viva ISV charge ─────────────────────────────────────────────────────
