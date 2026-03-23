@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { waiterDb } from "@/lib/waiterDb";
 import { useWaiterStore } from "@/store/waiterStore";
-import { supabase, decodeUnicodeEscapes } from "@/lib/supabase";
+import { supabase, decodeUnicodeEscapes, isShiftActive } from "@/lib/supabase";
 // BottomNav removed — all navigation in top header
 import PinchZoomContainer from "@/components/PinchZoomContainer";
 import QRScanner from "@/components/QRScanner";
@@ -432,6 +432,21 @@ export default function TablesPage() {
     void registerPushNotifications(waiter.id, waiter.venue_id);
   }, [waiter, waiter!.venue_id]);
 
+  // Session exclusivity: check every 30s if our shift is still active
+  useEffect(() => {
+    const { currentShiftId, logout } = useWaiterStore.getState();
+    if (!currentShiftId || !isOnline) return;
+    const interval = setInterval(async () => {
+      const active = await isShiftActive(currentShiftId);
+      if (!active) {
+        clearInterval(interval);
+        logout();
+        router.replace("/?kicked=1");
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [isOnline, router]);
+
   // Cleanup bill subscription on unmount
   useEffect(() => {
     return () => {
@@ -858,7 +873,7 @@ export default function TablesPage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="font-bold text-base" style={{ color: "var(--brand, #3B82F6)" }}>EL-Waiter</span>
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.5.0</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.5.1</span>
             </div>
             <div className="flex items-center gap-2 mt-0.5">
               <div

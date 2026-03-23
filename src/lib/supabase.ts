@@ -118,16 +118,43 @@ export async function fetchProfilesForVenue(venueId: string): Promise<WaiterProf
   return data ?? [];
 }
 
-// ── Shift tracking ───────────────────────────────────────────────────────────
+// ── Shift tracking + session exclusivity ─────────────────────────────────────
 
+/**
+ * Start a new shift and close any existing active shifts for this waiter.
+ * Returns the new shift ID. Only one active shift per waiter is allowed —
+ * logging in on a new device closes the old shift and kicks the old device.
+ */
 export async function startShift(waiterId: string, venueId: string, waiterName: string): Promise<string | null> {
   if (!supabase) return null;
+  // Close all existing active shifts for this waiter (kick from other devices)
+  await supabase
+    .from("waiter_shifts")
+    .update({ logout_at: new Date().toISOString() })
+    .eq("waiter_id", waiterId)
+    .is("logout_at", null);
+  // Start new shift
   const { data } = await supabase
     .from("waiter_shifts")
     .insert({ waiter_id: waiterId, venue_id: venueId, waiter_name: waiterName })
     .select("id")
     .single();
   return data?.id ?? null;
+}
+
+/**
+ * Check if our shift is still the active one (no logout_at set).
+ * If another device logged in, our shift will have logout_at set.
+ */
+export async function isShiftActive(shiftId: string): Promise<boolean> {
+  if (!supabase || !shiftId) return true; // offline — assume valid
+  const { data } = await supabase
+    .from("waiter_shifts")
+    .select("logout_at")
+    .eq("id", shiftId)
+    .single();
+  if (!data) return false;
+  return data.logout_at === null;
 }
 
 export async function endShift(shiftId: string): Promise<void> {

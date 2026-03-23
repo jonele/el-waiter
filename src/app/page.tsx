@@ -58,6 +58,17 @@ export default function LoginPage() {
   const [setupError, setSetupError] = useState("");
   const [setupScanning, setSetupScanning] = useState(true);
 
+  // Session kicked message
+  const [kicked, setKicked] = useState(false);
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.search.includes("kicked=1")) {
+      setKicked(true);
+      // Clean URL
+      window.history.replaceState({}, "", window.location.pathname);
+      setTimeout(() => setKicked(false), 6000);
+    }
+  }, []);
+
   // Multi-venue picker state
   const [siblingVenues, setSiblingVenues] = useState<SiblingVenue[]>([]);
   const [showVenuePicker, setShowVenuePicker] = useState(false);
@@ -448,6 +459,21 @@ export default function LoginPage() {
       <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, background: "var(--c-brand-glow)" }} />
 
       <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 20, width: "100%", maxWidth: 360 }}>
+        {/* Kicked banner */}
+        {kicked && (
+          <div style={{
+            background: "rgba(239,68,68,0.15)", border: "1px solid rgba(239,68,68,0.4)",
+            borderRadius: 12, padding: "12px 16px", textAlign: "center", width: "100%",
+          }}>
+            <p style={{ color: "#f87171", fontSize: 14, fontWeight: 700 }}>
+              {"\u26A0\uFE0F"} {"\u0391\u03C0\u03BF\u03C3\u03C5\u03BD\u03B4\u03B5\u03B8\u03AE\u03BA\u03B1\u03C4\u03B5"}
+            </p>
+            <p style={{ color: "#fca5a5", fontSize: 12, marginTop: 4 }}>
+              {"\u039A\u03AC\u03C0\u03BF\u03B9\u03BF\u03C2 \u03C3\u03C5\u03BD\u03B4\u03AD\u03B8\u03B7\u03BA\u03B5 \u03BC\u03B5 \u03C4\u03BF\u03BD \u03BB\u03BF\u03B3\u03B1\u03C1\u03B9\u03B1\u03C3\u03BC\u03CC \u03C3\u03B1\u03C2 \u03B1\u03C0\u03CC \u03AC\u03BB\u03BB\u03B7 \u03C3\u03C5\u03C3\u03BA\u03B5\u03C5\u03AE."}
+            </p>
+          </div>
+        )}
+
         {/* Brand */}
         <div style={{ textAlign: "center" }}>
           <WaiterLogo size={64} />
