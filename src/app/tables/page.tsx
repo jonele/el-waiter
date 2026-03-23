@@ -160,6 +160,9 @@ export default function TablesPage() {
   // View mode: keypad (default/primary), map (grid), list (open tables)
   const [viewMode, setViewMode] = useState<"keypad" | "map" | "list">("map");
 
+  // Staff profiles for messaging
+  const [staffProfiles, setStaffProfiles] = useState<{ name: string; icon: string }[]>([]);
+
   // Check-in state
   const [showCheckin, setShowCheckin] = useState(false);
   const [checkinQuery, setCheckinQuery] = useState("");
@@ -430,6 +433,10 @@ export default function TablesPage() {
     }
     // Register native push notifications (no-op on web)
     void registerPushNotifications(waiter.id, waiter.venue_id);
+    // Load staff profiles for messaging
+    void waiterDb.waiterProfiles.where("venue_id").equals(venueId || waiter.venue_id).toArray().then((profiles) => {
+      setStaffProfiles(profiles.filter((p) => p.active && p.name !== waiter.name).map((p) => ({ name: p.name, icon: p.icon || "\uD83D\uDC64" })));
+    });
   }, [waiter, waiter!.venue_id]);
 
   // Session exclusivity: check every 30s if our shift is still active
@@ -1922,20 +1929,25 @@ export default function TablesPage() {
             <p style={{ fontWeight: 700, marginBottom: 16, color: "var(--c-text)", fontSize: 16 }}>
               {"\uD83D\uDCAC \u039C\u03AE\u03BD\u03C5\u03BC\u03B1 \u03C3\u03C4\u03BF \u03C0\u03C1\u03BF\u03C3\u03C9\u03C0\u03B9\u03BA\u03CC"}
             </p>
-            {/* Target chips */}
+            {/* Target chips — all active staff + boss + all */}
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
-              {["boss", "all"].map((t) => (
+              {[
+                { key: "all", label: "\uD83D\uDCE2 \u038C\u03BB\u03BF\u03B9" },
+                { key: "boss", label: "\uD83D\uDC51 Boss" },
+                ...staffProfiles.map((p) => ({ key: p.name.toLowerCase(), label: `${p.icon} ${p.name}` })),
+              ].map((t) => (
                 <button
-                  key={t}
-                  onClick={() => setMsgTarget(t)}
+                  key={t.key}
+                  onClick={() => setMsgTarget(t.key)}
                   style={{
                     padding: "8px 14px", borderRadius: 20, border: "none",
-                    background: msgTarget === t ? "#3b82f6" : "var(--c-surface2)",
-                    color: msgTarget === t ? "#fff" : "var(--c-text2)",
+                    background: msgTarget === t.key ? "#3b82f6" : "var(--c-surface2)",
+                    color: msgTarget === t.key ? "#fff" : "var(--c-text2)",
                     fontWeight: 600, fontSize: 13, cursor: "pointer",
+                    transition: "transform 0.1s",
                   }}
                 >
-                  @{t}
+                  {t.label}
                 </button>
               ))}
             </div>
