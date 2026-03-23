@@ -15,7 +15,7 @@ const THEMES: { key: Theme; label: string; icon: string }[] = [
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { waiter, settings, updateSettings, isOnline, pendingSyncs, failedSyncs, lastSyncedAt, theme, setTheme, logout, deviceVenueId, currentShiftId } = useWaiterStore();
+  const { waiter, settings, updateSettings, isOnline, pendingSyncs, failedSyncs, lastSyncedAt, theme, setTheme, logout, deviceVenueId, currentShiftId, demoMode, setDemoMode } = useWaiterStore();
   const [form, setForm] = useState(settings);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
@@ -103,6 +103,35 @@ export default function SettingsPage() {
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-5 pb-safe">
+
+        {/* Demo mode toggle */}
+        <div
+          className="flex items-center justify-between rounded-2xl px-4 py-4"
+          style={{
+            background: demoMode ? "rgba(245,158,11,0.1)" : "var(--c-surface)",
+            border: demoMode ? "2px solid rgba(245,158,11,0.4)" : "1px solid var(--c-border)",
+          }}
+        >
+          <div>
+            <p className="font-semibold text-sm" style={{ color: "var(--c-text)" }}>
+              {demoMode ? "\uD83C\uDFAD Demo Mode" : "\uD83D\uDD34 Live Mode"}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: demoMode ? "#f59e0b" : "#22c55e" }}>
+              {demoMode ? "Viva/ΑΑΔΕ απενεργοποιημένα — ασφαλές για δοκιμές" : "Ζωντανές πληρωμές + φορολογικά ενεργά"}
+            </p>
+          </div>
+          <button
+            onClick={() => setDemoMode(!demoMode)}
+            className={`relative h-7 w-12 rounded-full transition-colors touch-btn ${!demoMode ? "bg-red-500" : ""}`}
+            style={demoMode ? { background: "#f59e0b" } : {}}
+            aria-label="Εναλλαγή demo mode"
+          >
+            <span className={`absolute top-1 h-5 w-5 rounded-full bg-white transition-transform shadow ${!demoMode ? "translate-x-6" : "translate-x-1"}`} />
+          </button>
+        </div>
+
+        {/* Divider */}
+        <div style={{ height: 1, background: "var(--c-border)" }} />
 
         {/* Wallet shortcut */}
         <button

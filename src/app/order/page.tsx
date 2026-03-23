@@ -414,6 +414,8 @@ function OrderPageInner() {
             });
 
             // 4. Issue 8.6 order slip (fiscal document, no payment yet)
+            // SKIP in demo mode — no fiscal calls to AADE
+            if (!useWaiterStore.getState().demoMode) {
             // Greek law requires this for dine-in before final payment
             void fetch(`${bridgeUrl}/api/v1/fiscal/order-ticket`, {
               method: "POST",
@@ -438,6 +440,7 @@ function OrderPageInner() {
               // Fiscal not configured or Bridge doesn't have endpoint yet
               // Order still fires — fiscal is additive, not blocking
             });
+            } // end demoMode check
 
             // Store bridge order ID for later fiscal final receipt
             if (supabase) {

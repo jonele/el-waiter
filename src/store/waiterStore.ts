@@ -29,6 +29,7 @@ interface WaiterState {
   deviceVenueId:   string | null;
   currentShiftId:  string | null;
   venueConfig:     VenueDeviceConfig | null;
+  demoMode:        boolean;
 
   login:             (w: DbWaiterProfile) => void;
   logout:            () => void;
@@ -42,6 +43,7 @@ interface WaiterState {
   setLastSyncedAt:   (ts: string | null) => void;
   setDeviceVenueId:  (id: string | null) => void;
   setVenueConfig:    (c: VenueDeviceConfig | null) => void;
+  setDemoMode:       (v: boolean) => void;
 }
 
 export const useWaiterStore = create<WaiterState>()(
@@ -58,6 +60,7 @@ export const useWaiterStore = create<WaiterState>()(
       deviceVenueId:   null,
       currentShiftId:  null,
       venueConfig:     null,
+      demoMode:        true, // DEFAULT ON — blocks Viva/fiscal until explicitly disabled
 
       login:             (waiter)  => set({ waiter }),
       logout:            ()        => set({ waiter: null, activeTable: null, currentShiftId: null, venueConfig: null }),
@@ -71,12 +74,13 @@ export const useWaiterStore = create<WaiterState>()(
       setLastSyncedAt:   (lastSyncedAt) => set({ lastSyncedAt }),
       setDeviceVenueId:  (deviceVenueId) => set({ deviceVenueId }),
       setVenueConfig:    (venueConfig) => set({ venueConfig }),
+      setDemoMode:       (demoMode) => set({ demoMode }),
     }),
     {
       name:    "el-waiter",
       version: 1,
       storage: createJSONStorage(() => localStorage),
-      partialize: (s) => ({ waiter: s.waiter, settings: s.settings, theme: s.theme, deviceVenueId: s.deviceVenueId, currentShiftId: s.currentShiftId, venueConfig: s.venueConfig }),
+      partialize: (s) => ({ waiter: s.waiter, settings: s.settings, theme: s.theme, deviceVenueId: s.deviceVenueId, currentShiftId: s.currentShiftId, venueConfig: s.venueConfig, demoMode: s.demoMode }),
       migrate: (persisted, version) => {
         if (version === 0) {
           // v0 -> v1: no-op, initial version

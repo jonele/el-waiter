@@ -169,6 +169,8 @@ export default function PayPage() {
     void supabase?.from("kitchen_orders").update({ status: "paid" }).eq("id", order.id);
 
     // Issue fiscal final receipt (11.1) via Bridge — links to 8.6 order slip
+    // SKIP in demo mode
+    if (useWaiterStore.getState().demoMode) return;
     const bridgeUrl = settings.bridgeUrl || "http://localhost:8088";
     const totalCents = Math.round(subtotal * 100);
     const tipCents = Math.round((splitPayments.reduce((s, p) => s + p.tip, 0) + tip) * 100);
