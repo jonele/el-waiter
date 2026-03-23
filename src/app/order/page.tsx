@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useEffect, useState, useMemo } from "react";
+import { Suspense, useEffect, useState, useMemo, useRef, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { waiterDb, getOpenOrder, calcTotal } from "@/lib/waiterDb";
 import { useWaiterStore } from "@/store/waiterStore";
@@ -69,8 +69,18 @@ function OrderPageInner() {
   const [upsells, setUpsells] = useState<string[]>([]);
   const [showUpsell, setShowUpsell] = useState(false);
   const [search, setSearch] = useState("");
-  const [tab, setTab] = useState<"menu" | "cart">("menu");
   const [activeSeat, setActiveSeat] = useState<number | null>(null);
+
+  // Cart side panel state
+  const [cartOpen, setCartOpen] = useState(false);
+
+  // Editing cart item modifiers
+  const [editingCartItemId, setEditingCartItemId] = useState<string | null>(null);
+
+  // Long-press qty popover
+  const [qtyPopoverItem, setQtyPopoverItem] = useState<DbMenuItem | null>(null);
+  const [qtyPopoverPos, setQtyPopoverPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Modifier state
   interface ModifierGroup {
@@ -231,11 +241,13 @@ function OrderPageInner() {
 
   function handleExtrasTap(e: React.MouseEvent, item: DbMenuItem) {
     e.stopPropagation();
+    setEditingCartItemId(null);
     setModifierItem(item);
     setModifierSelections({});
   }
 
-  function addItemDirect(item: DbMenuItem, mods?: OrderItemModifier[]) {
+  function addItemDirect(item: DbMenuItem, mods?: OrderItemModifier[], qty?: number) {
+    const addQty = qty ?? 1;
     setOrderItems((prev) => {
       // If no modifiers, try to increment existing
       if (!mods || mods.length === 0) {
@@ -244,18 +256,18 @@ function OrderPageInner() {
         );
         if (existing) {
           return prev.map((o) =>
-            o.id === existing.id ? { ...o, quantity: o.quantity + 1 } : o
+            o.id === existing.id ? { ...o, quantity: o.quantity + addQty } : o
           );
         }
       }
       const modExtra = (mods || []).reduce((s, m) => s + m.price_modifier, 0);
-      const modNotes = (mods || []).map((m) => m.name + (m.price_modifier > 0 ? ` +${m.price_modifier.toFixed(2)}€` : "")).join(", ");
+      const modNotes = (mods || []).map((m) => m.name + (m.price_modifier > 0 ? ` +${m.price_modifier.toFixed(2)}\u20AC` : "")).join(", ");
       const newItem: DbOrderItem = {
         id: uuidv4(),
         menu_item_id: item.id,
         name: item.name,
         price: item.price,
-        quantity: 1,
+        quantity: addQty,
         modifiers: mods,
         notes: modNotes || undefined,
       };
@@ -284,7 +296,21 @@ function OrderPageInner() {
         }
       }
     }
-    addItemDirect(modifierItem, mods);
+
+    if (editingCartItemId) {
+      // Update existing cart item modifiers
+      const modNotes = mods.map((m) => m.name + (m.price_modifier > 0 ? ` +${m.price_modifier.toFixed(2)}\u20AC` : "")).join(", ");
+      setOrderItems((prev) =>
+        prev.map((o) =>
+          o.id === editingCartItemId
+            ? { ...o, modifiers: mods, notes: modNotes || undefined }
+            : o
+        )
+      );
+      setEditingCartItemId(null);
+    } else {
+      addItemDirect(modifierItem, mods);
+    }
     setModifierItem(null);
     setModifierSelections({});
   }
@@ -320,6 +346,69 @@ function OrderPageInner() {
       setOrder((prev) => prev ? { ...prev, items: next, total: newTotal } : prev);
     }
   }
+
+  // Per-item seat cycling: null → 1 → 2 → ... → capacity → null
+  function cycleSeat(itemId: string) {
+    setOrderItems((prev) =>
+      prev.map((o) => {
+        if (o.id !== itemId) return o;
+        const cur = o.seat ?? null;
+        if (cur === null) return { ...o, seat: 1 };
+        if (cur >= capacity) {
+          const { seat: _removed, ...rest } = o;
+          return rest as DbOrderItem;
+        }
+        return { ...o, seat: cur + 1 };
+      })
+    );
+  }
+
+  // Open modifier sheet to edit an existing cart item's extras
+  function editCartItemExtras(cartItem: DbOrderItem) {
+    // Look up the DbMenuItem from loaded items or categories
+    const menuItem = items.find((i) => i.id === cartItem.menu_item_id);
+    if (!menuItem) return;
+    setEditingCartItemId(cartItem.id);
+    setModifierItem(menuItem);
+    // Pre-fill current modifier selections
+    const groups = getItemModGroups(menuItem);
+    const selections: Record<string, string[]> = {};
+    if (cartItem.modifiers) {
+      for (const g of groups) {
+        const selected: string[] = [];
+        for (const mod of cartItem.modifiers) {
+          const match = g.options.find((o) => o.code === mod.code && o.name === mod.name);
+          if (match) selected.push(match.id);
+        }
+        if (selected.length > 0) selections[g.id] = selected;
+      }
+    }
+    setModifierSelections(selections);
+  }
+
+  // Long-press handlers for menu grid
+  const handlePointerDown = useCallback((e: React.PointerEvent, item: DbMenuItem) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    longPressTimer.current = setTimeout(() => {
+      setQtyPopoverItem(item);
+      setQtyPopoverPos({ x: rect.left + rect.width / 2, y: rect.top });
+      longPressTimer.current = null;
+    }, 500);
+  }, []);
+
+  const handlePointerUp = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  const handlePointerCancel = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
 
   const total = calcTotal(orderItems);
   const minOk = !settings.minConsumptionEur || total >= settings.minConsumptionEur;
@@ -490,88 +579,59 @@ function OrderPageInner() {
         </div>
       )}
 
-      {/* Header */}
+      {/* ── COMPACT HEADER (single row ~48px) ── */}
       <div
         className="pt-safe sticky top-0 z-30 backdrop-blur-md border-b"
         style={{ background: "var(--c-header)", borderColor: "var(--c-border)" }}
       >
-
-        {/* Top row: back / table name / pay */}
-        <div className="px-2 py-2 flex items-center justify-between gap-2">
+        <div className="px-2 h-12 flex items-center gap-1.5">
+          {/* Back */}
           <button
             onClick={() => router.push("/tables")}
-            className="flex items-center justify-center w-[60px] h-[60px] text-gray-400 active:text-white transition-colors shrink-0"
+            className="flex items-center justify-center w-10 h-10 text-gray-400 active:text-white transition-colors shrink-0"
             aria-label="Πίσω"
           >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
 
-          <div className="text-center flex-1">
-            <p className="font-black text-xl leading-none" style={{ color: "var(--c-text)" }}>{activeTable?.name}</p>
-            <p className="text-xs mt-0.5" style={{ color: "var(--c-text2)" }}>{waiter?.name}</p>
+          {/* Table + waiter inline */}
+          <div className="flex items-center gap-1 min-w-0 flex-1">
+            <span className="font-black text-sm truncate" style={{ color: "var(--c-text)" }}>{activeTable?.name}</span>
+            <span className="text-xs truncate" style={{ color: "var(--c-text3)" }}>{"\u00B7"} {waiter?.name}</span>
           </div>
 
+          {/* Cart badge — tap to toggle side panel */}
+          <button
+            onClick={() => setCartOpen((p) => !p)}
+            className="flex items-center gap-1 shrink-0 px-2 h-9 rounded-lg active:scale-95 transition-all"
+            style={{ background: cartCount > 0 ? "rgba(59,130,246,0.15)" : "transparent" }}
+          >
+            <svg className="w-4 h-4" style={{ color: cartCount > 0 ? "#3B82F6" : "var(--c-text3)" }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
+            </svg>
+            {cartCount > 0 && (
+              <span className="text-xs font-black" style={{ color: "#3B82F6" }}>{cartCount}</span>
+            )}
+          </button>
+
+          {/* Total */}
+          <span
+            className={`font-black text-sm shrink-0 ${!minOk ? "text-amber-400" : ""}`}
+            style={minOk ? { color: "var(--c-text)" } : {}}
+          >
+            {total.toFixed(2)}{"\u20AC"}
+          </span>
+
+          {/* Pay button */}
           <button
             onClick={() => router.push("/pay")}
-            className="shrink-0 rounded-full bg-accent px-5 py-2.5 font-semibold text-white text-sm active:bg-emerald-700 active:scale-95 transition-all mr-2"
+            className="shrink-0 rounded-full bg-accent px-3 py-1.5 font-semibold text-white text-xs active:bg-emerald-700 active:scale-95 transition-all"
           >
             Πληρωμή
           </button>
         </div>
-
-        {/* Sub-bar: menu/cart toggle + total */}
-        <div className="px-4 pb-2 flex items-center justify-between gap-2">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setTab("menu")}
-              className={`rounded-full px-4 h-9 text-sm font-semibold transition-colors
-                ${tab === "menu" ? "bg-brand text-white" : "bg-gray-800 text-gray-400 active:bg-gray-700"}`}
-            >
-              Μενού
-            </button>
-            <button
-              onClick={() => setTab("cart")}
-              className={`rounded-full px-4 h-9 text-sm font-semibold transition-colors relative
-                ${tab === "cart" ? "bg-brand text-white" : "bg-gray-800 text-gray-400 active:bg-gray-700"}`}
-            >
-              Καλάθι{cartCount > 0 ? ` (${cartCount})` : ""}
-            </button>
-          </div>
-          <span
-            className={`font-black text-xl ${!minOk ? "text-amber-400" : ""}`}
-            style={minOk ? { color: "var(--c-text)" } : {}}
-          >
-            {total.toFixed(2)}€
-          </span>
-        </div>
-
-        {/* Seat picker row — only for tables with 2+ seats */}
-        {showSeatPicker && (
-          <div className="px-4 pb-3 flex items-center gap-2.5">
-            <span className="text-xs text-gray-500 shrink-0 font-medium">Θέση:</span>
-            <div className="flex gap-1.5 overflow-x-auto">
-              <button
-                onClick={() => setActiveSeat(null)}
-                className={`shrink-0 rounded-full px-3 h-7 text-xs font-semibold transition-colors
-                  ${activeSeat === null ? "bg-gray-200 text-gray-900" : "bg-gray-800 text-gray-400 active:bg-gray-700"}`}
-              >
-                Όλα
-              </button>
-              {Array.from({ length: capacity }, (_, i) => i + 1).map((s) => (
-                <button
-                  key={s}
-                  onClick={() => setActiveSeat(s === activeSeat ? null : s)}
-                  className={`shrink-0 w-7 h-7 rounded-full text-xs font-black transition-colors
-                    ${activeSeat === s ? "bg-brand text-white" : "bg-gray-800 text-gray-400 active:bg-gray-700"}`}
-                >
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Allergy / dietary alert panel */}
@@ -589,7 +649,7 @@ function OrderPageInner() {
           {activeTable?.seated_allergies && activeTable.seated_allergies.length > 0 && (
             <p style={{ margin: 0, fontSize: "13px", lineHeight: "1.4" }}>
               <span style={{ color: "#F59E0B", fontWeight: 700 }}>
-                {"⚠️ ΑΛΛΕΡΓΙΕΣ: "}
+                {"\u26A0\uFE0F ΑΛΛΕΡΓΙΕΣ: "}
               </span>
               <span style={{ color: "#fcd34d" }}>
                 {activeTable.seated_allergies.join(", ")}
@@ -599,7 +659,7 @@ function OrderPageInner() {
           {activeTable?.seated_dietary && activeTable.seated_dietary.length > 0 && (
             <p style={{ margin: "4px 0 0", fontSize: "13px", lineHeight: "1.4" }}>
               <span style={{ color: "#10B981" }}>
-                {"🌱 "}
+                {"\uD83C\uDF31 "}
               </span>
               <span style={{ color: "#6ee7b7" }}>
                 {activeTable.seated_dietary.join(", ")}
@@ -609,276 +669,300 @@ function OrderPageInner() {
         </div>
       )}
 
-      {/* MENU TAB */}
-      {tab === "menu" ? (
-        <div className="flex flex-1 overflow-hidden">
+      {/* ── MAIN AREA: always menu ── */}
+      <div className="flex flex-1 overflow-hidden relative">
 
-          {/* Category sidebar */}
-          <div
-            className="w-20 shrink-0 overflow-y-auto border-r py-1"
-            style={{ background: "var(--c-surface)", borderColor: "var(--c-border)" }}
-          >
-            {categories.map((c) => (
-              <button
-                key={c.id}
-                onClick={() => { setActiveCategory(c.id); setSearch(""); }}
-                className={`w-full min-h-[60px] px-1 py-3 flex flex-col items-center justify-center gap-1 transition-colors
-                  ${activeCategory === c.id ? "border-r-2 border-brand bg-brand/10" : "active:opacity-60"}`}
-                style={{ color: activeCategory === c.id ? "#3B82F6" : "var(--c-text2)" }}
-              >
-                {c.color && (
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{ backgroundColor: c.color }}
-                  />
-                )}
-                <span className="text-[11px] font-medium leading-tight text-center line-clamp-2 px-1">
-                  {decodeUnicodeEscapes(c.name)}
-                </span>
-              </button>
-            ))}
+        {/* Category sidebar */}
+        <div
+          className="w-20 shrink-0 overflow-y-auto border-r py-1"
+          style={{ background: "var(--c-surface)", borderColor: "var(--c-border)" }}
+        >
+          {categories.map((c) => (
+            <button
+              key={c.id}
+              onClick={() => { setActiveCategory(c.id); setSearch(""); }}
+              className={`w-full min-h-[60px] px-1 py-3 flex flex-col items-center justify-center gap-1 transition-colors
+                ${activeCategory === c.id ? "border-r-2 border-brand bg-brand/10" : "active:opacity-60"}`}
+              style={{ color: activeCategory === c.id ? "#3B82F6" : "var(--c-text2)" }}
+            >
+              {c.color && (
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: c.color }}
+                />
+              )}
+              <span className="text-[11px] font-medium leading-tight text-center line-clamp-2 px-1">
+                {decodeUnicodeEscapes(c.name)}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {/* Items grid */}
+        <div className="flex-1 overflow-y-auto" style={{ marginRight: cartCount > 0 && !cartOpen ? 44 : 0 }}>
+          <div className="p-3 pb-1">
+            <input
+              type="search"
+              placeholder="Αναζήτηση..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full rounded-xl px-4 py-2.5 text-sm outline-none"
+              style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
+            />
           </div>
-
-          {/* Items grid */}
-          <div className="flex-1 overflow-y-auto">
-            <div className="p-3 pb-1">
-              <input
-                type="search"
-                placeholder="Αναζήτηση..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full rounded-xl px-4 py-2.5 text-sm outline-none"
-                style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-2 px-3 pb-[calc(80px+env(safe-area-inset-bottom))] sm:grid-cols-3">
-              {filtered.map((item) => {
-                const qty = itemCartQty(item.id);
-                const hasModifiers = getItemModGroups(item).length > 0;
-                return (
-                  <div
-                    key={item.id}
-                    className={`relative flex flex-col rounded-2xl text-left min-h-[80px] transition-all
-                      ${qty > 0 ? "border border-brand/50 bg-brand/10" : ""}`}
-                    style={qty === 0 ? { background: "var(--c-surface2)" } : {}}
+          <div className="grid grid-cols-2 gap-2 px-3 pb-6 sm:grid-cols-3">
+            {filtered.map((item) => {
+              const qty = itemCartQty(item.id);
+              const hasModifiers = getItemModGroups(item).length > 0;
+              return (
+                <div
+                  key={item.id}
+                  className={`relative flex flex-col rounded-2xl text-left min-h-[80px] transition-all
+                    ${qty > 0 ? "border border-brand/50 bg-brand/10" : ""}`}
+                  style={qty === 0 ? { background: "var(--c-surface2)" } : {}}
+                >
+                  <button
+                    onClick={() => handleItemTap(item)}
+                    onPointerDown={(e) => handlePointerDown(e, item)}
+                    onPointerUp={handlePointerUp}
+                    onPointerCancel={handlePointerCancel}
+                    onPointerLeave={handlePointerCancel}
+                    onContextMenu={(e) => e.preventDefault()}
+                    className="flex-1 flex flex-col p-3 text-left active:scale-95 transition-all duration-75"
                   >
+                    <span className="text-sm font-semibold leading-snug line-clamp-2 flex-1" style={{ color: "var(--c-text)" }}>
+                      {decodeUnicodeEscapes(item.name)}
+                    </span>
+                    <span className="text-accent font-bold text-sm mt-1.5">
+                      {item.price.toFixed(2)}{"\u20AC"}
+                    </span>
+                  </button>
+                  {hasModifiers && (
                     <button
-                      onClick={() => handleItemTap(item)}
-                      className="flex-1 flex flex-col p-3 text-left active:scale-95 transition-all duration-75"
+                      onClick={(e) => handleExtrasTap(e, item)}
+                      className="mx-2 mb-2 px-2 py-1 rounded-lg text-[11px] font-bold tracking-wide text-center transition-colors"
+                      style={{ background: "var(--c-brand-dim, rgba(99,102,241,0.15))", color: "var(--c-brand, #818cf8)" }}
                     >
-                      <span className="text-sm font-semibold leading-snug line-clamp-2 flex-1" style={{ color: "var(--c-text)" }}>
-                        {decodeUnicodeEscapes(item.name)}
-                      </span>
-                      <span className="text-accent font-bold text-sm mt-1.5">
-                        {item.price.toFixed(2)}€
-                      </span>
+                      EXTRAS
                     </button>
-                    {hasModifiers && (
-                      <button
-                        onClick={(e) => handleExtrasTap(e, item)}
-                        className="mx-2 mb-2 px-2 py-1 rounded-lg text-[11px] font-bold tracking-wide text-center transition-colors"
-                        style={{ background: "var(--c-brand-dim, rgba(99,102,241,0.15))", color: "var(--c-brand, #818cf8)" }}
-                      >
-                        EXTRAS
-                      </button>
-                    )}
-                    {qty > 0 && (
-                      <span className="absolute top-2 right-2 w-6 h-6 rounded-full bg-brand text-white text-xs font-black flex items-center justify-center">
-                        {qty}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                  )}
+                  {qty > 0 && (
+                    <span className="absolute top-2 right-2 w-6 h-6 rounded-full bg-brand text-white text-xs font-black flex items-center justify-center">
+                      {qty}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
-      ) : (
-        /* CART TAB — grouped by seat */
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-5" style={{ paddingBottom: "calc(140px + env(safe-area-inset-bottom))" }}>
-          {orderItems.length === 0 ? (
-            <div className="flex flex-col items-center justify-center mt-20 gap-5">
-              <p className="text-lg font-semibold" style={{ color: "var(--c-text3)" }}>Κενή παραγγελία</p>
-              <button
-                onClick={() => setTab("menu")}
-                className="rounded-2xl px-6 h-12 font-semibold text-sm active:scale-95 transition-transform"
-                style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
-              >
-                ← Μενού
-              </button>
-            </div>
-          ) : (
-            Array.from(seatGroups.entries())
-              .sort(([a], [b]) => (a ?? 999) - (b ?? 999))
-              .map(([seat, group]) => (
-                <div key={seat ?? "none"}>
-                  {showSeatPicker && (
-                    <p className="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">
-                      {seat !== null ? `Θεση ${seat}` : "Χωρις θεση"}
-                    </p>
-                  )}
-                  <div className="space-y-2">
-                    {group.map((item) => (
+
+        {/* ── Collapsed cart strip (right edge) ── */}
+        {cartCount > 0 && !cartOpen && (
+          <button
+            onClick={() => setCartOpen(true)}
+            className="absolute right-0 top-0 bottom-0 w-11 flex flex-col items-center justify-center gap-2 border-l active:opacity-80 z-10"
+            style={{ background: "var(--c-surface)", borderColor: "var(--c-border)" }}
+          >
+            <svg className="w-5 h-5" style={{ color: "#3B82F6" }} fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 100 4 2 2 0 000-4z" />
+            </svg>
+            <span className="text-xs font-black" style={{ color: "#3B82F6" }}>{cartCount}</span>
+            <span className="text-[10px] font-bold" style={{ color: "var(--c-text2)" }}>{total.toFixed(2)}{"\u20AC"}</span>
+          </button>
+        )}
+
+        {/* ── Expanded cart side panel (70% width, slides from right) ── */}
+        {cartOpen && (
+          <>
+            {/* Dim overlay */}
+            <div
+              className="absolute inset-0 z-20"
+              style={{ background: "rgba(0,0,0,0.5)" }}
+              onClick={() => setCartOpen(false)}
+            />
+            {/* Panel */}
+            <div
+              className="absolute right-0 top-0 bottom-0 z-30 flex flex-col overflow-hidden"
+              style={{
+                width: "70%",
+                maxWidth: 400,
+                background: "var(--c-surface)",
+                borderLeft: "1px solid var(--c-border)",
+                animation: "slideInRight 0.2s ease-out",
+              }}
+            >
+              {/* Panel header */}
+              <div className="flex items-center justify-between px-3 h-11 border-b shrink-0" style={{ borderColor: "var(--c-border)" }}>
+                <span className="font-black text-sm" style={{ color: "var(--c-text)" }}>
+                  Καλάθι ({cartCount}) {total.toFixed(2)}{"\u20AC"}
+                </span>
+                <button
+                  onClick={() => setCartOpen(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full active:scale-90"
+                  style={{ color: "var(--c-text3)" }}
+                >
+                  {"\u2715"}
+                </button>
+              </div>
+
+              {/* Scrollable cart items */}
+              <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5">
+                {orderItems.length === 0 ? (
+                  <p className="text-center text-sm mt-8" style={{ color: "var(--c-text3)" }}>Κενή παραγγελία</p>
+                ) : (
+                  orderItems.map((item) => {
+                    const modExtra = (item.modifiers || []).reduce((s, m) => s + m.price_modifier, 0);
+                    const lineTotal = (item.price + modExtra) * item.quantity;
+                    const menuItem = items.find((i) => i.id === item.menu_item_id);
+                    const hasModGroups = menuItem ? getItemModGroups(menuItem).length > 0 : false;
+                    return (
                       <div
                         key={item.id}
-                        className="flex items-center rounded-2xl px-4 min-h-[56px] gap-2"
-                        style={{ background: "var(--c-surface)" }}
+                        className="rounded-xl p-2"
+                        style={{ background: "var(--c-surface2)" }}
                       >
-                        {/* Seat badge */}
-                        {item.seat != null && (
-                          <span
-                            className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-black"
-                            style={{ background: "var(--c-surface2)", color: "var(--c-text2)" }}
-                          >
-                            Θ{item.seat}
-                          </span>
-                        )}
-
-                        {/* Name + modifiers + price */}
-                        <div className="flex-1 py-3 min-w-0">
-                          <p className="font-semibold text-sm truncate" style={{ color: "var(--c-text)" }}>{decodeUnicodeEscapes(item.name)}</p>
-                          {item.modifiers && item.modifiers.length > 0 && (
-                            <p className="text-[11px] mt-0.5 leading-snug" style={{ color: "var(--brand, #3B82F6)" }}>
-                              {item.modifiers.map((m) => m.name + (m.price_modifier > 0 ? ` +${m.price_modifier.toFixed(2)}\u20AC` : "")).join(" · ")}
+                        {/* Name + price row */}
+                        <div className="flex items-start justify-between gap-1">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-xs truncate" style={{ color: "var(--c-text)" }}>
+                              {decodeUnicodeEscapes(item.name)}
                             </p>
-                          )}
-                          <p className="text-xs mt-0.5" style={{ color: "var(--c-text2)" }}>
-                            {(() => {
-                              const modExtra = (item.modifiers || []).reduce((s, m) => s + m.price_modifier, 0);
-                              const unitPrice = item.price + modExtra;
-                              const lineTotal = unitPrice * item.quantity;
-                              return (<>{unitPrice.toFixed(2)}{"\u20AC"} {"\u00D7"} {item.quantity} = <span className="text-gray-300 font-medium">{lineTotal.toFixed(2)}{"\u20AC"}</span></>);
-                            })()}
-                          </p>
+                            {item.modifiers && item.modifiers.length > 0 && (
+                              <p className="text-[10px] mt-0.5 leading-snug truncate" style={{ color: "var(--brand, #3B82F6)" }}>
+                                {item.modifiers.map((m) => m.name).join(" \u00B7 ")}
+                              </p>
+                            )}
+                          </div>
+                          <span className="text-xs font-bold shrink-0" style={{ color: "var(--c-text)" }}>
+                            {lineTotal.toFixed(2)}{"\u20AC"}
+                          </span>
                         </div>
 
-                        {/* Qty controls */}
-                        <div className="flex items-center gap-1.5 shrink-0">
+                        {/* Controls row */}
+                        <div className="flex items-center gap-1 mt-1.5">
+                          {/* Qty: [−] qty [+] */}
                           <button
                             onClick={() => updateItemQty(item.id, item.quantity - 1)}
-                            className="w-[52px] h-[52px] rounded-full flex items-center justify-center text-xl font-bold active:scale-90 transition-all"
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold active:scale-90"
                             style={{ background: "rgba(239,68,68,0.15)", color: "#ef4444" }}
-                            aria-label="Μείωση"
                           >
-                            −
+                            {"\u2212"}
                           </button>
-                          <span className="font-black text-base text-center" style={{ minWidth: 32, color: "var(--c-text)" }}>
+                          <span className="font-black text-xs text-center" style={{ minWidth: 18, color: "var(--c-text)" }}>
                             {item.quantity}
                           </span>
                           <button
                             onClick={() => updateItemQty(item.id, item.quantity + 1)}
-                            className="w-[52px] h-[52px] rounded-full flex items-center justify-center text-xl font-bold active:scale-90 transition-all"
+                            className="w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold active:scale-90"
                             style={{ background: "rgba(34,197,94,0.15)", color: "#22c55e" }}
-                            aria-label="Αύξηση"
                           >
                             +
                           </button>
+
+                          <div className="flex-1" />
+
+                          {/* Seat button (if capacity >= 2) */}
+                          {showSeatPicker && (
+                            <button
+                              onClick={() => cycleSeat(item.id)}
+                              className="h-7 px-1.5 rounded-lg text-[10px] font-black active:scale-90 transition-all"
+                              style={{ background: "var(--c-surface)", color: item.seat ? "#3B82F6" : "var(--c-text3)" }}
+                            >
+                              {item.seat ? `\u0398${item.seat}` : "\u0398-"}
+                            </button>
+                          )}
+
+                          {/* Edit modifiers button */}
+                          {hasModGroups && (
+                            <button
+                              onClick={() => editCartItemExtras(item)}
+                              className="w-7 h-7 rounded-full flex items-center justify-center active:scale-90"
+                              style={{ background: "rgba(99,102,241,0.15)", color: "#818cf8" }}
+                              aria-label="Επεξεργασία extras"
+                            >
+                              {"\u270E"}
+                            </button>
+                          )}
+
+                          {/* Delete */}
+                          <button
+                            onClick={() => removeItem(item.id)}
+                            className="w-7 h-7 rounded-full flex items-center justify-center active:scale-90"
+                            style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444" }}
+                            aria-label="Διαγραφή"
+                          >
+                            {"\u2715"}
+                          </button>
                         </div>
-
-                        {/* Trash / direct delete */}
-                        <button
-                          onClick={() => removeItem(item.id)}
-                          className="w-[52px] h-[52px] rounded-full flex items-center justify-center active:scale-90 transition-all shrink-0"
-                          style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444" }}
-                          aria-label="Διαγραφή"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M9 7V4h6v3M3 7h18" />
-                          </svg>
-                        </button>
                       </div>
-                    ))}
-                  </div>
+                    );
+                  })
+                )}
+              </div>
+
+              {/* Bottom: send to kitchen */}
+              {orderItems.length > 0 && (
+                <div className="px-3 py-2 border-t shrink-0" style={{ borderColor: "var(--c-border)" }}>
+                  {!minOk && (
+                    <p className="text-center text-amber-400 text-[10px] mb-1">
+                      Κάτω από ελάχιστη κατανάλωση ({settings.minConsumptionEur}{"\u20AC"})
+                    </p>
+                  )}
+                  <button
+                    onClick={sendToKitchen}
+                    disabled={sending}
+                    className="w-full rounded-xl bg-brand h-11 font-black text-white text-sm active:scale-[0.97] transition-transform duration-75 disabled:opacity-40"
+                  >
+                    {sending ? "Αποστολή..." : `Αποστολή στην κουζίνα \u2192 ${total.toFixed(2)}\u20AC`}
+                  </button>
                 </div>
-              ))
-          )}
-        </div>
-      )}
+              )}
+            </div>
+          </>
+        )}
+      </div>
 
-      {/* Send to kitchen CTA + swipe-up cart preview */}
-      {orderItems.length > 0 && (
-        <div
-          className="border-t pb-safe"
-          style={{ background: "var(--c-surface)", borderColor: "var(--c-border)" }}
-        >
-          {/* Swipe-up handle — tap to toggle cart preview */}
-          <button
-            onClick={() => { if (tab === "menu") setTab("cart"); else setTab("menu"); }}
-            className="w-full flex items-center justify-center gap-2 py-2"
-            style={{ background: "var(--c-surface)" }}
-            aria-label="Προβολή παραγγελίας"
+      {/* ── Long-press qty popover ── */}
+      {qtyPopoverItem && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setQtyPopoverItem(null)}
+          />
+          <div
+            className="fixed z-50 flex gap-1 rounded-xl p-1.5 shadow-xl"
+            style={{
+              left: Math.max(8, Math.min(qtyPopoverPos.x - 90, window.innerWidth - 188)),
+              top: Math.max(8, qtyPopoverPos.y - 44),
+              background: "var(--c-surface)",
+              border: "1px solid var(--c-border)",
+            }}
           >
-            <div className="w-8 h-1 rounded-full" style={{ background: "var(--c-text3)" }} />
-          </button>
-
-          {/* Compact cart preview — visible in menu tab */}
-          {tab === "menu" && (
-            <div className="px-4 pb-2 max-h-[30vh] overflow-y-auto">
-              {orderItems.map((item) => {
-                const modExtra = (item.modifiers || []).reduce((s, m) => s + m.price_modifier, 0);
-                return (
-                  <div key={item.id} className="flex items-center gap-2 py-1.5 border-b" style={{ borderColor: "var(--c-border)" }}>
-                    <span className="text-xs font-bold min-w-[20px] text-center" style={{ color: "var(--brand, #3B82F6)" }}>{item.quantity}x</span>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold truncate" style={{ color: "var(--c-text)" }}>{decodeUnicodeEscapes(item.name)}</p>
-                      {item.modifiers && item.modifiers.length > 0 && (
-                        <p className="text-[10px] truncate" style={{ color: "var(--brand, #3B82F6)" }}>
-                          {item.modifiers.map((m) => m.name).join(" · ")}
-                        </p>
-                      )}
-                    </div>
-                    <span className="text-xs font-semibold shrink-0" style={{ color: "var(--c-text2)" }}>
-                      {((item.price + modExtra) * item.quantity).toFixed(2)}{"\u20AC"}
-                    </span>
-                    <button
-                      onClick={() => removeItem(item.id)}
-                      className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 active:scale-90"
-                      style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", fontSize: 12 }}
-                      aria-label={"\u0394\u03B9\u03B1\u03B3\u03C1\u03B1\u03C6\u03AE"}
-                    >
-                      {"\u2715"}
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Total + send button */}
-          <div className="px-4 py-3">
-            <div className="flex items-center justify-between mb-2 px-1">
-              <span className="text-xs font-medium" style={{ color: "var(--c-text2)" }}>
-                {orderItems.length} {"\u03C0\u03C1\u03BF\u03CA\u03CC\u03BD\u03C4\u03B1"} {"\u00B7"} {"\u03A3\u03CD\u03BD\u03BF\u03BB\u03BF"}
-              </span>
-              <span
-                className="font-black"
-                style={{ fontSize: 20, color: !minOk ? "#f59e0b" : "var(--c-text)" }}
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button
+                key={n}
+                onClick={() => {
+                  addItemDirect(qtyPopoverItem, undefined, n);
+                  setQtyPopoverItem(null);
+                }}
+                className="w-9 h-9 rounded-lg font-black text-sm flex items-center justify-center active:scale-90 transition-all"
+                style={{ background: "var(--c-surface2)", color: "var(--c-text)" }}
               >
-                {total.toFixed(2)}{"\u20AC"}
-              </span>
-            </div>
-            <button
-              onClick={sendToKitchen}
-              disabled={sending}
-              className="w-full rounded-2xl bg-brand h-16 font-black text-white text-lg active:scale-[0.97] transition-transform duration-75 disabled:opacity-40"
-            >
-              {sending ? "\u0391\u03C0\u03BF\u03C3\u03C4\u03BF\u03BB\u03AE..." : `\u0391\u03C0\u03BF\u03C3\u03C4\u03BF\u03BB\u03AE \u03C3\u03C4\u03B7\u03BD \u03BA\u03BF\u03C5\u03B6\u03AF\u03BD\u03B1 \u2192`}
-            </button>
-            {!minOk && (
-              <p className="text-center text-amber-400 text-xs mt-2">
-                {"\u039A\u03AC\u03C4\u03C9 \u03B1\u03C0\u03CC \u03B5\u03BB\u03AC\u03C7\u03B9\u03C3\u03C4\u03B7 \u03BA\u03B1\u03C4\u03B1\u03BD\u03AC\u03BB\u03C9\u03C3\u03B7"} ({settings.minConsumptionEur}{"\u20AC"})
-              </p>
-            )}
+                {n}
+              </button>
+            ))}
           </div>
-        </div>
+        </>
       )}
+
       {/* Modifier bottom sheet */}
       {modifierItem && (() => {
         const groups = getItemModGroups(modifierItem);
-        const modExtra = Object.entries(modifierSelections).reduce((total, [gid, optIds]) => {
+        const modExtra = Object.entries(modifierSelections).reduce((t, [gid, optIds]) => {
           const group = groups.find((g) => g.id === gid);
-          if (!group) return total;
-          return total + optIds.reduce((s, oid) => {
+          if (!group) return t;
+          return t + optIds.reduce((s, oid) => {
             const opt = group.options.find((o) => o.id === oid);
             return s + (opt?.price_modifier || 0);
           }, 0);
@@ -889,7 +973,7 @@ function OrderPageInner() {
         return (
           <div
             className="fixed inset-0 z-50 flex flex-col justify-end"
-            onClick={(e) => { if (e.target === e.currentTarget) { setModifierItem(null); setModifierSelections({}); } }}
+            onClick={(e) => { if (e.target === e.currentTarget) { setModifierItem(null); setModifierSelections({}); setEditingCartItemId(null); } }}
             style={{ background: "rgba(0,0,0,0.5)" }}
           >
             <div
@@ -907,7 +991,7 @@ function OrderPageInner() {
                   <p className="text-sm font-semibold" style={{ color: "var(--brand, #3B82F6)" }}>{modifierItem.price.toFixed(2)}{"\u20AC"}</p>
                 </div>
                 <button
-                  onClick={() => { setModifierItem(null); setModifierSelections({}); }}
+                  onClick={() => { setModifierItem(null); setModifierSelections({}); setEditingCartItemId(null); }}
                   className="w-10 h-10 rounded-full flex items-center justify-center transition-transform active:scale-90"
                   style={{ background: "var(--c-surface2)", color: "var(--c-text3)" }}
                   aria-label="Κλείσιμο"
@@ -928,11 +1012,11 @@ function OrderPageInner() {
                         background: (modifierSelections[g.id]?.length || 0) > 0 ? "rgba(34,197,94,0.2)" : "rgba(239,68,68,0.2)",
                         color: (modifierSelections[g.id]?.length || 0) > 0 ? "#22c55e" : "#ef4444",
                       }}>
-                        {(modifierSelections[g.id]?.length || 0) > 0 ? "\u2713" : "\u0391\u03C0\u03B1\u03B9\u03C4\u03B5\u03AF\u03C4\u03B1\u03B9"}
+                        {(modifierSelections[g.id]?.length || 0) > 0 ? "\u2713" : "Απαιτείται"}
                       </span>
                     )}
                     <span className="text-[10px]" style={{ color: "var(--c-text3)" }}>
-                      {g.selection_type === "single" ? "(\u03AD\u03BD\u03B1)" : "(\u03C0\u03BF\u03BB\u03BB\u03B1\u03C0\u03BB\u03AC)"}
+                      {g.selection_type === "single" ? "(ένα)" : "(πολλαπλά)"}
                     </span>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -962,19 +1046,27 @@ function OrderPageInner() {
                 </div>
               ))}
 
-              {/* Add button */}
+              {/* Add/Update button */}
               <button
                 onClick={confirmModifiers}
                 disabled={!allRequiredMet}
                 className="w-full rounded-2xl h-16 font-black text-white text-lg transition-transform active:scale-[0.97] disabled:opacity-30 mb-2"
                 style={{ background: allRequiredMet ? "var(--brand, #3B82F6)" : "var(--c-surface2)" }}
               >
-                {"\u03A0\u03A1\u039F\u03A3\u0398\u0397\u039A\u0397"} {itemTotal.toFixed(2)}{"\u20AC"}
+                {editingCartItemId ? "ΕΝΗΜΕΡΩΣΗ" : "ΠΡΟΣΘΗΚΗ"} {itemTotal.toFixed(2)}{"\u20AC"}
               </button>
             </div>
           </div>
         );
       })()}
+
+      {/* Inline keyframe for side panel slide-in */}
+      <style>{`
+        @keyframes slideInRight {
+          from { transform: translateX(100%); }
+          to { transform: translateX(0); }
+        }
+      `}</style>
     </div>
   );
 }
