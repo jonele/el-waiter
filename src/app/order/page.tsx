@@ -795,32 +795,81 @@ function OrderPageInner() {
         </div>
       )}
 
-      {/* Send to kitchen CTA */}
+      {/* Send to kitchen CTA + swipe-up cart preview */}
       {orderItems.length > 0 && (
-        <div className="border-t px-4 py-3 pb-safe" style={{ background: "var(--c-surface)", borderColor: "var(--c-border)" }}>
-          {tab === "cart" && (
-            <div className="flex items-center justify-between mb-3 px-1">
-              <span className="text-sm font-medium" style={{ color: "var(--c-text2)" }}>Σύνολο</span>
-              <span
-                className="font-black"
-                style={{ fontSize: 22, color: !minOk ? "#f59e0b" : "var(--c-text)" }}
-              >
-                {total.toFixed(2)}€
-              </span>
+        <div
+          className="border-t pb-safe"
+          style={{ background: "var(--c-surface)", borderColor: "var(--c-border)" }}
+        >
+          {/* Swipe-up handle — tap to toggle cart preview */}
+          <button
+            onClick={() => { if (tab === "menu") setTab("cart"); else setTab("menu"); }}
+            className="w-full flex items-center justify-center gap-2 py-2"
+            style={{ background: "var(--c-surface)" }}
+            aria-label="Προβολή παραγγελίας"
+          >
+            <div className="w-8 h-1 rounded-full" style={{ background: "var(--c-text3)" }} />
+          </button>
+
+          {/* Compact cart preview — visible in menu tab */}
+          {tab === "menu" && (
+            <div className="px-4 pb-2 max-h-[30vh] overflow-y-auto">
+              {orderItems.map((item) => {
+                const modExtra = (item.modifiers || []).reduce((s, m) => s + m.price_modifier, 0);
+                return (
+                  <div key={item.id} className="flex items-center gap-2 py-1.5 border-b" style={{ borderColor: "var(--c-border)" }}>
+                    <span className="text-xs font-bold min-w-[20px] text-center" style={{ color: "var(--brand, #3B82F6)" }}>{item.quantity}x</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold truncate" style={{ color: "var(--c-text)" }}>{decodeUnicodeEscapes(item.name)}</p>
+                      {item.modifiers && item.modifiers.length > 0 && (
+                        <p className="text-[10px] truncate" style={{ color: "var(--brand, #3B82F6)" }}>
+                          {item.modifiers.map((m) => m.name).join(" · ")}
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-xs font-semibold shrink-0" style={{ color: "var(--c-text2)" }}>
+                      {((item.price + modExtra) * item.quantity).toFixed(2)}{"\u20AC"}
+                    </span>
+                    <button
+                      onClick={() => removeItem(item.id)}
+                      className="w-7 h-7 rounded-full flex items-center justify-center shrink-0 active:scale-90"
+                      style={{ background: "rgba(239,68,68,0.12)", color: "#ef4444", fontSize: 12 }}
+                      aria-label={"\u0394\u03B9\u03B1\u03B3\u03C1\u03B1\u03C6\u03AE"}
+                    >
+                      {"\u2715"}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
           )}
-          <button
-            onClick={sendToKitchen}
-            disabled={sending}
-            className="w-full rounded-2xl bg-brand h-16 font-black text-white text-lg active:scale-[0.97] transition-transform duration-75 disabled:opacity-40"
-          >
-            {sending ? "Αποστολή..." : `Αποστολή στην κουζίνα — ${total.toFixed(2)}€`}
-          </button>
-          {!minOk && (
-            <p className="text-center text-amber-400 text-xs mt-2">
-              Κάτω από ελάχιστη κατανάλωση ({settings.minConsumptionEur}€)
-            </p>
-          )}
+
+          {/* Total + send button */}
+          <div className="px-4 py-3">
+            <div className="flex items-center justify-between mb-2 px-1">
+              <span className="text-xs font-medium" style={{ color: "var(--c-text2)" }}>
+                {orderItems.length} {"\u03C0\u03C1\u03BF\u03CA\u03CC\u03BD\u03C4\u03B1"} {"\u00B7"} {"\u03A3\u03CD\u03BD\u03BF\u03BB\u03BF"}
+              </span>
+              <span
+                className="font-black"
+                style={{ fontSize: 20, color: !minOk ? "#f59e0b" : "var(--c-text)" }}
+              >
+                {total.toFixed(2)}{"\u20AC"}
+              </span>
+            </div>
+            <button
+              onClick={sendToKitchen}
+              disabled={sending}
+              className="w-full rounded-2xl bg-brand h-16 font-black text-white text-lg active:scale-[0.97] transition-transform duration-75 disabled:opacity-40"
+            >
+              {sending ? "\u0391\u03C0\u03BF\u03C3\u03C4\u03BF\u03BB\u03AE..." : `\u0391\u03C0\u03BF\u03C3\u03C4\u03BF\u03BB\u03AE \u03C3\u03C4\u03B7\u03BD \u03BA\u03BF\u03C5\u03B6\u03AF\u03BD\u03B1 \u2192`}
+            </button>
+            {!minOk && (
+              <p className="text-center text-amber-400 text-xs mt-2">
+                {"\u039A\u03AC\u03C4\u03C9 \u03B1\u03C0\u03CC \u03B5\u03BB\u03AC\u03C7\u03B9\u03C3\u03C4\u03B7 \u03BA\u03B1\u03C4\u03B1\u03BD\u03AC\u03BB\u03C9\u03C3\u03B7"} ({settings.minConsumptionEur}{"\u20AC"})
+              </p>
+            )}
+          </div>
         </div>
       )}
       {/* Modifier bottom sheet */}
