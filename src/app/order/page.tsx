@@ -6,6 +6,7 @@ import { useWaiterStore } from "@/store/waiterStore";
 import { supabase, decodeUnicodeEscapes } from "@/lib/supabase";
 import { v4 as uuidv4 } from "uuid";
 import type { DbMenuCategory, DbMenuItem, DbOrderItem, DbOrder, DbTable, OrderItemModifier } from "@/lib/waiterDb";
+import { printKitchenTicket } from "@/lib/nativePrinter";
 
 // Virtual table for takeaway orders
 const TAKEAWAY_TABLE: DbTable = {
@@ -458,7 +459,18 @@ function OrderPageInner() {
       useWaiterStore.getState().setPendingSyncs(cnt);
     }
 
-    // 3. Print to kitchen via EL Bridge on LAN (fire-and-forget)
+    // 3. Print to kitchen — try native TCP first (Capacitor), then Bridge HTTP
+    const kitchenPrinterIp = useWaiterStore.getState().venueConfig?.kitchen_printers?.[0]?.ip;
+    if (kitchenPrinterIp) {
+      void printKitchenTicket(
+        kitchenPrinterIp,
+        activeTable.name,
+        waiter.name,
+        orderItems,
+        settings.bridgeUrl || undefined,
+      );
+    } else {
+    // No kitchen printer IP — fall back to Bridge HTTP only
     const bridgeUrl = settings.bridgeUrl || "http://localhost:8088";
     void (async () => {
       try {
@@ -543,6 +555,7 @@ function OrderPageInner() {
         // Kitchen will see it on KDS via Supabase realtime
       }
     })();
+    } // end else (no kitchen printer IP)
 
     setOrder(newOrder);
     setSending(false);

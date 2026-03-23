@@ -1,12 +1,13 @@
 import type { CapacitorConfig } from "@capacitor/cli";
 
 const config: CapacitorConfig = {
-  appId: "com.elvalue.elwaiter",
-  appName: "EL Waiter",
-  webDir: "capacitor-shell",   // minimal fallback — app loads from server.url
+  appId: "com.elvalue.joey",
+  appName: "Joey",
+  webDir: "capacitor-shell",
   server: {
     url: "https://el-waiter.vercel.app",
-    cleartext: false,
+    cleartext: true, // Allow HTTP to LAN printers
+    androidScheme: "https",
   },
   plugins: {
     CapacitorSQLite: {
