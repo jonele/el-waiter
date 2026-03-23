@@ -12,22 +12,25 @@ export const runtime = "edge";
  * GET /api/rsrv/lookup?venueId=xxx&q=6912345678
  */
 
-const RSRV_URL = process.env.RSRV_SUPABASE_URL || "https://qlvqrlfupoeysllnpxcy.supabase.co";
-const RSRV_KEY = process.env.RSRV_SERVICE_KEY || "";
+const RSRV_URL = "https://qlvqrlfupoeysllnpxcy.supabase.co";
+const RSRV_KEY = process.env.RSRV_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsdnFybGZ1cG9leXNsbG5weGN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0NTc3MTgsImV4cCI6MjA4MzAzMzcxOH0.4Iy5mX1XdZHT6PPb1ieLmKRO9XOJGwRzLdsSMPYdjng";
+
+const VENUE_MAP: Record<string, string> = {
+  "a052b0f8-409a-4477-b4ea-70758d190ace": "96a702cf-b9c6-4a6d-aded-dd6b5cd32389",
+};
 
 export async function GET(req: NextRequest) {
-  const venueId = req.nextUrl.searchParams.get("venueId");
+  let venueId = req.nextUrl.searchParams.get("venueId");
   const query = req.nextUrl.searchParams.get("q")?.trim();
 
   if (!venueId || !query) {
     return NextResponse.json({ error: "Missing venueId or q" }, { status: 400 });
   }
 
-  if (!RSRV_KEY) {
-    return NextResponse.json({ error: "Server config error" }, { status: 500 });
-  }
-
   const supabase = createClient(RSRV_URL, RSRV_KEY);
+
+  // Map EL-Loyal venue ID → RSRV venue ID
+  venueId = VENUE_MAP[venueId] || venueId;
 
   // Today's date for filtering
   const today = new Date().toISOString().slice(0, 10);
