@@ -101,10 +101,11 @@ function OrderPageInner() {
   }, [waiter, activeTable, isTakeaway]);
 
   async function loadData() {
-    const vid = useWaiterStore.getState().deviceVenueId || waiter!.venue_id;
+    const vid = useWaiterStore.getState().deviceVenueId || waiter?.venue_id || "";
+    if (!vid || !activeTable) return;
     const [cats, existingOrder] = await Promise.all([
       waiterDb.menuCategories.where("venue_id").equals(vid).sortBy("sort_order"),
-      getOpenOrder(activeTable!.id),
+      getOpenOrder(activeTable.id),
     ]);
     let activeCats = cats.filter((c) => c.is_active);
     setCategories(activeCats);
