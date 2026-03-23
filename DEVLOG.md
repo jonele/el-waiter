@@ -1,4 +1,27 @@
 
+## 2026-03-23 — EL-Waiter v2.5.0: Kitchen Print + Check-in + Real-time Sync
+
+### Kitchen Printing via Bridge
+- Orders now POST to Bridge LAN API on "Αποστολή στην κουζίνα"
+- Creates order + triggers kitchen printer (fire-and-forget, 10s timeout)
+- Modifiers sent as separate field matching EL-POS `printer.rs` format
+- Bridge handles ESC/POS formatting + TCP 9100 to kitchen printer
+- Fallback: order saved in Supabase + local DB if Bridge unreachable
+
+### Real-time Table Status Sync
+- Table status pushed to Supabase when order sent (occupied) and paid (free)
+- All connected waiters see changes instantly via Supabase realtime subscription
+- Customer name + party size shown on occupied table cards
+
+### Reservation Check-in
+- 📋 button in header opens check-in bottom sheet
+- QR scanner for RSRV confirmation codes
+- Manual search by name, phone, email, or confirmation code
+- "Seat" button marks reservation as seated + assigns table
+- New API: GET /api/rsrv/lookup (searches RSRV Supabase)
+
+---
+
 ## 2026-03-23 — EL-Waiter v2.4.0: Production Hardening + Premium UI
 
 ### Premium RSRV-Style Table Cards
