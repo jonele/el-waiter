@@ -771,7 +771,14 @@ export default function TablesPage() {
 
   const filtered = tables
     .filter((t) => activeSection === "all" || t.floor_section_id === activeSection)
-    .filter((t) => !tableSearch || t.name.toLowerCase().includes(tableSearch.toLowerCase()));
+    .filter((t) => !tableSearch || t.name.toLowerCase().includes(tableSearch.toLowerCase()))
+    .sort((a, b) => {
+      // Group by section first, then sort by name within section
+      if (a.floor_section_id !== b.floor_section_id) {
+        return (a.floor_section_id || "").localeCompare(b.floor_section_id || "");
+      }
+      return a.name.localeCompare(b.name, undefined, { numeric: true });
+    });
 
   function handleTableSearchKey(e: React.KeyboardEvent<HTMLInputElement>) {
     if (e.key === "Enter" && tableSearch) {
@@ -960,7 +967,7 @@ export default function TablesPage() {
           className="flex gap-2 overflow-x-auto px-4 py-2.5 border-b shrink-0"
           style={{ background: "var(--c-bg)", borderColor: "var(--c-border)" }}
         >
-          {[{ id: "all", name: "Όλα" }, ...sections].map((s) => (
+          {[{ id: "all", name: "Όλα" }, ...sections.filter((sec) => tables.some((t) => t.floor_section_id === sec.id))].map((s) => (
             <button
               key={s.id}
               onClick={() => setActiveSection(s.id)}
@@ -1343,7 +1350,7 @@ export default function TablesPage() {
                         className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
                         style={{ background: "rgba(0,0,0,0.25)", color: "var(--c-card-text)" }}
                       >
-                        {total.toFixed(2)}\u20AC
+                        {total.toFixed(2)}{"\u20AC"}
                       </span>
                     )}
                     {/* Allergy / dietary badges */}
