@@ -101,6 +101,7 @@ export default function TablesPage() {
   const [sections, setSections] = useState<DbFloorSection[]>([]);
   const [tables, setTables] = useState<DbTable[]>([]);
   const [orderTotals, setOrderTotals] = useState<Record<string, number>>({});
+  const [orderWaiters, setOrderWaiters] = useState<Record<string, string>>({});
   const [activeSection, setActiveSection] = useState<string>("all");
   const [syncing, setSyncing] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -162,6 +163,8 @@ export default function TablesPage() {
 
   // Staff profiles for messaging
   const [staffProfiles, setStaffProfiles] = useState<{ name: string; icon: string }[]>([]);
+  // All venue open orders (fetched on-demand when Ανοιχτά view opened)
+  const [allOpenOrders, setAllOpenOrders] = useState<{ table_name: string; cashier_name: string; total: number; items_count: number }[]>([]);
 
   // Check-in state
   const [showCheckin, setShowCheckin] = useState(false);
@@ -307,6 +310,26 @@ export default function TablesPage() {
     setKeypadInput("");
     setShowNoMatch(false);
     setSplitParent(null);
+  }
+
+  // ---------- Fetch all open orders for Ανοιχτά view ----------
+  async function fetchAllOpenOrders() {
+    if (!supabase) return;
+    const vid = venueId || waiter?.venue_id || "";
+    if (!vid) return;
+    const { data } = await supabase
+      .from("kitchen_orders")
+      .select("tab_name, cashier_name, items, status")
+      .eq("venue_id", vid)
+      .in("status", ["pending", "sent"]);
+    if (data) {
+      setAllOpenOrders(data.map((o) => ({
+        table_name: o.tab_name,
+        cashier_name: o.cashier_name,
+        total: Array.isArray(o.items) ? (o.items as { price: number; quantity: number }[]).reduce((s, i) => s + (i.price || 0) * (i.quantity || 1), 0) : 0,
+        items_count: Array.isArray(o.items) ? o.items.length : 0,
+      })));
+    }
   }
 
   // ---------- Check-in: search + seat ----------
@@ -548,8 +571,13 @@ export default function TablesPage() {
     setSections(secs);
     setTables(tbls.filter((t) => t.is_active));
     const totals: Record<string, number> = {};
-    for (const o of orders) totals[o.table_id] = (totals[o.table_id] || 0) + o.total;
+    const waiters: Record<string, string> = {};
+    for (const o of orders) {
+      totals[o.table_id] = (totals[o.table_id] || 0) + o.total;
+      waiters[o.table_id] = o.waiter_name;
+    }
     setOrderTotals(totals);
+    setOrderWaiters(waiters);
   }
 
   async function syncFromSupabase() {
@@ -1055,7 +1083,7 @@ export default function TablesPage() {
             ]).map((m) => (
               <button
                 key={m.key}
-                onClick={() => setViewMode(m.key)}
+                onClick={() => { setViewMode(m.key); if (m.key === "list") void fetchAllOpenOrders(); }}
                 className={`flex-1 rounded-xl h-10 text-sm font-bold transition-colors ${
                   viewMode === m.key ? "bg-brand text-white" : "active:opacity-70"
                 }`}
@@ -1186,55 +1214,73 @@ export default function TablesPage() {
             </div>
           )}
 
-          {/* ---- OPEN TABLES LIST VIEW ---- */}
+          {/* ---- OPEN TABLES LIST VIEW (My tables + Others) ---- */}
           {viewMode === "list" && (
             <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(16px+env(safe-area-inset-bottom))]">
+              {/* MY TABLES — from local DB */}
               {(() => {
-                const openTables = tables
-                  .filter((t) => t.status === "occupied" || orderTotals[t.id])
-                  .sort((a, b) => {
-                    const na = parseInt(a.name) || 0, nb = parseInt(b.name) || 0;
-                    if (na !== nb) return na - nb;
-                    return a.name.localeCompare(b.name);
-                  });
-                if (openTables.length === 0) {
-                  return (
-                    <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>
-                      {"\u039A\u03B1\u03BD\u03AD\u03BD\u03B1 \u03B1\u03BD\u03BF\u03B9\u03C7\u03C4\u03CC \u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9"}
+                const myTables = tables
+                  .filter((t) => orderTotals[t.id] && orderWaiters[t.id] === waiter?.name)
+                  .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+                return (
+                  <>
+                    <p className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: "var(--brand, #3B82F6)" }}>
+                      {"\uD83D\uDC64 \u0394\u03B9\u03BA\u03AC \u03BC\u03BF\u03C5"} ({myTables.length})
                     </p>
-                  );
-                }
-                return openTables.map((t) => {
-                  const total = orderTotals[t.id];
-                  const st = getStatusStyle(t.status, theme === "dark" || theme === "grey");
-                  return (
-                    <button
-                      key={t.id}
-                      onClick={() => openTable(t)}
-                      className="w-full flex items-center gap-3 px-4 min-h-[60px] border-b transition-transform active:scale-[0.98]"
-                      style={{
-                        background: "var(--c-surface)",
-                        borderColor: "var(--c-border)",
-                        borderBottomWidth: "var(--c-table-border-w, 1px)",
-                      }}
-                    >
-                      <span
-                        className="h-3 w-3 rounded-full shrink-0"
-                        style={{ background: st.dot }}
-                      />
-                      <span className="text-lg font-black flex-shrink-0 min-w-[60px]" style={{ color: "var(--c-text)" }}>
-                        {t.name}
-                      </span>
-                      <span className="flex-1" />
-                      {total !== undefined && (
-                        <span className="text-sm font-bold" style={{ color: "var(--brand, #3B82F6)" }}>
-                          {total.toFixed(2)}{"\u20AC"}
-                        </span>
-                      )}
-                      <span className="text-lg" style={{ color: "var(--c-text3)" }}>{"\u203A"}</span>
-                    </button>
-                  );
-                });
+                    {myTables.length === 0 ? (
+                      <p className="text-xs mb-4 pl-2" style={{ color: "var(--c-text3)" }}>{"\u039A\u03B1\u03BD\u03AD\u03BD\u03B1 \u03B1\u03BD\u03BF\u03B9\u03C7\u03C4\u03CC \u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9"}</p>
+                    ) : (
+                      myTables.map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => openTable(t)}
+                          className="w-full flex items-center gap-3 px-4 min-h-[56px] border-b transition-transform active:scale-[0.98] mb-0.5"
+                          style={{ background: "var(--c-surface)", borderColor: "var(--c-border)" }}
+                        >
+                          <span className="text-base font-black min-w-[50px]" style={{ color: "var(--c-text)" }}>{t.name}</span>
+                          <span className="flex-1" />
+                          <span className="text-sm font-bold" style={{ color: "var(--brand, #3B82F6)" }}>
+                            {(orderTotals[t.id] || 0).toFixed(2)}{"\u20AC"}
+                          </span>
+                          <span style={{ color: "var(--c-text3)" }}>{"\u203A"}</span>
+                        </button>
+                      ))
+                    )}
+
+                    {/* OTHERS — from Supabase kitchen_orders */}
+                    {(() => {
+                      const otherOrders = allOpenOrders.filter((o) => o.cashier_name !== waiter?.name);
+                      if (otherOrders.length === 0) return null;
+                      // Group by waiter
+                      const byWaiter: Record<string, typeof otherOrders> = {};
+                      for (const o of otherOrders) {
+                        if (!byWaiter[o.cashier_name]) byWaiter[o.cashier_name] = [];
+                        byWaiter[o.cashier_name].push(o);
+                      }
+                      return Object.entries(byWaiter).map(([waiterName, orders]) => (
+                        <div key={waiterName} className="mt-4">
+                          <p className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: "var(--c-text2)" }}>
+                            {staffProfiles.find((p) => p.name === waiterName)?.icon || "\uD83D\uDC64"} {waiterName} ({orders.length})
+                          </p>
+                          {orders.map((o, idx) => (
+                            <div
+                              key={`${waiterName}-${idx}`}
+                              className="flex items-center gap-3 px-4 min-h-[48px] border-b mb-0.5"
+                              style={{ background: "var(--c-surface2)", borderColor: "var(--c-border)", borderRadius: 8 }}
+                            >
+                              <span className="text-sm font-bold min-w-[50px]" style={{ color: "var(--c-text)" }}>{o.table_name}</span>
+                              <span className="text-xs" style={{ color: "var(--c-text3)" }}>{o.items_count} {"\u03C0\u03C1."}</span>
+                              <span className="flex-1" />
+                              <span className="text-sm font-semibold" style={{ color: "var(--c-text2)" }}>
+                                {o.total.toFixed(2)}{"\u20AC"}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ));
+                    })()}
+                  </>
+                );
               })()}
             </div>
           )}
