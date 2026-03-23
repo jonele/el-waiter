@@ -353,12 +353,16 @@ function OrderPageInner() {
     void (async () => {
       try {
         // Create order on Bridge
+        // Match EL-POS kitchen ticket format:
+        // modifiers → comma-separated, printed as "  + Μέτριο, Με γάλα"
+        // notes → printed as "  >> customer notes"
         const bridgeItems = orderItems.map((item) => ({
           product_id: item.menu_item_id,
-          product_name: item.name + (item.modifiers?.length ? ` [${item.modifiers.map((m) => m.name).join(", ")}]` : ""),
+          product_name: item.name,
           quantity: item.quantity,
           unit_price_cents: Math.round((item.price + (item.modifiers || []).reduce((s, m) => s + m.price_modifier, 0)) * 100),
-          notes: item.notes || null,
+          modifiers: item.modifiers?.length ? item.modifiers.map((m) => m.name).join(", ") : null,
+          notes: null,
           course: 1,
           vat_rate: 0.24,
         }));
