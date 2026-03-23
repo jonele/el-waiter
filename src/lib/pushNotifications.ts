@@ -8,10 +8,15 @@ export async function registerPushNotifications(waiterId?: string, venueId?: str
   try {
     const { PushNotifications } = await import("@capacitor/push-notifications");
 
-    const permResult = await PushNotifications.requestPermissions();
-    if (permResult.receive !== "granted") return;
-
-    await PushNotifications.register();
+    // Skip if Firebase not configured (no google-services.json)
+    try {
+      const permResult = await PushNotifications.requestPermissions();
+      if (permResult.receive !== "granted") return;
+      await PushNotifications.register();
+    } catch {
+      // Firebase not initialized — push notifications disabled for this build
+      return;
+    }
 
     PushNotifications.addListener("registration", async (token) => {
       if (!waiterId || !venueId) return;
