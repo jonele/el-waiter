@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "edge";
 
 const RSRV_URL = "https://qlvqrlfupoeysllnpxcy.supabase.co";
-const RSRV_KEY = process.env.RSRV_ANON_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFsdnFybGZ1cG9leXNsbG5weGN5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0NTc3MTgsImV4cCI6MjA4MzAzMzcxOH0.4Iy5mX1XdZHT6PPb1ieLmKRO9XOJGwRzLdsSMPYdjng";
+const RSRV_KEY = process.env.RSRV_ANON_KEY || "";
 
 // Map EL-Loyal venue IDs → RSRV venue IDs
 const VENUE_MAP: Record<string, string> = {
@@ -17,6 +17,18 @@ export async function GET(req: NextRequest) {
   const date = req.nextUrl.searchParams.get("date");
   if (!venueId || !date) {
     return NextResponse.json({ error: "Missing venueId or date" }, { status: 400 });
+  }
+  // Validate UUID format
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(venueId)) {
+    return NextResponse.json({ error: "Invalid venueId" }, { status: 400 });
+  }
+  // Validate date format (YYYY-MM-DD)
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return NextResponse.json({ error: "Invalid date format" }, { status: 400 });
+  }
+
+  if (!RSRV_KEY) {
+    return NextResponse.json({ error: "RSRV not configured" }, { status: 503 });
   }
 
   // Resolve RSRV venue ID

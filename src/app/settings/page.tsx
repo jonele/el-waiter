@@ -16,11 +16,13 @@ const THEMES: { key: Theme; label: string; icon: string }[] = [
 export default function SettingsPage() {
   const router = useRouter();
   const { waiter, settings, updateSettings, isOnline, pendingSyncs, failedSyncs, lastSyncedAt, theme, setTheme, logout, deviceVenueId, currentShiftId, demoMode, setDemoMode } = useWaiterStore();
-  const [form, setForm] = useState(settings);
+  // Guard against corrupted/missing settings from localStorage hydration
+  const safeSettings = settings ?? { bridgeUrl: "http://localhost:8088", btEnabled: false, minConsumptionEur: 0 };
+  const [form, setForm] = useState(safeSettings);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
 
-  useEffect(() => { setForm(settings); }, [settings]);
+  useEffect(() => { setForm(settings ?? { bridgeUrl: "http://localhost:8088", btEnabled: false, minConsumptionEur: 0 }); }, [settings]);
 
   function save() {
     updateSettings(form);

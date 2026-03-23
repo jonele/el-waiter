@@ -35,6 +35,10 @@ export async function POST(req: NextRequest) {
   if (!body.amount_cents || !body.merchant_id || !body.order_id) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
+  // Validate amount is a positive integer (cents)
+  if (typeof body.amount_cents !== "number" || body.amount_cents <= 0 || !Number.isInteger(body.amount_cents) || body.amount_cents > 99999999) {
+    return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
+  }
 
   if (!ISV_CLIENT_ID || !ISV_CLIENT_SECRET) {
     return NextResponse.json({ error: "ISV credentials not configured" }, { status: 500 });

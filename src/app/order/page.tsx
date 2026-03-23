@@ -806,6 +806,24 @@ function OrderPageInner() {
                 </button>
               </div>
 
+              {/* Send to kitchen — pinned at top so it's always visible */}
+              {orderItems.length > 0 && (
+                <div className="px-3 py-2 border-b shrink-0" style={{ borderColor: "var(--c-border)" }}>
+                  {!minOk && (
+                    <p className="text-center text-amber-400 text-[10px] mb-1">
+                      Κάτω από ελάχιστη κατανάλωση ({settings.minConsumptionEur}{"\u20AC"})
+                    </p>
+                  )}
+                  <button
+                    onClick={sendToKitchen}
+                    disabled={sending}
+                    className="w-full rounded-xl bg-brand h-11 font-black text-white text-sm active:scale-[0.97] transition-transform duration-75 disabled:opacity-40"
+                  >
+                    {sending ? "Αποστολή..." : `Αποστολή στην κουζίνα \u2192 ${total.toFixed(2)}\u20AC`}
+                  </button>
+                </div>
+              )}
+
               {/* Scrollable cart items */}
               <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5">
                 {orderItems.length === 0 ? (
@@ -901,23 +919,7 @@ function OrderPageInner() {
                 )}
               </div>
 
-              {/* Bottom: send to kitchen */}
-              {orderItems.length > 0 && (
-                <div className="px-3 py-2 border-t shrink-0" style={{ borderColor: "var(--c-border)" }}>
-                  {!minOk && (
-                    <p className="text-center text-amber-400 text-[10px] mb-1">
-                      Κάτω από ελάχιστη κατανάλωση ({settings.minConsumptionEur}{"\u20AC"})
-                    </p>
-                  )}
-                  <button
-                    onClick={sendToKitchen}
-                    disabled={sending}
-                    className="w-full rounded-xl bg-brand h-11 font-black text-white text-sm active:scale-[0.97] transition-transform duration-75 disabled:opacity-40"
-                  >
-                    {sending ? "Αποστολή..." : `Αποστολή στην κουζίνα \u2192 ${total.toFixed(2)}\u20AC`}
-                  </button>
-                </div>
-              )}
+              {/* Bottom spacer removed — send button is now at top */}
             </div>
           </>
         )}

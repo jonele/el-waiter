@@ -39,6 +39,10 @@ export async function POST(req: NextRequest) {
   if (!terminal_id || !merchant_id || !amount_cents || !session_id) {
     return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
   }
+  // Validate amount is a positive integer (cents)
+  if (typeof amount_cents !== "number" || amount_cents <= 0 || !Number.isInteger(amount_cents) || amount_cents > 99999999) {
+    return NextResponse.json({ error: "Invalid amount" }, { status: 400 });
+  }
 
   let token: string;
   try {

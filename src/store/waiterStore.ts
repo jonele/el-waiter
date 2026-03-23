@@ -78,14 +78,25 @@ export const useWaiterStore = create<WaiterState>()(
     }),
     {
       name:    "el-waiter",
-      version: 1,
+      version: 2,
       storage: createJSONStorage(() => localStorage),
-      partialize: (s) => ({ waiter: s.waiter, settings: s.settings, theme: s.theme, deviceVenueId: s.deviceVenueId, currentShiftId: s.currentShiftId, venueConfig: s.venueConfig, demoMode: s.demoMode }),
+      partialize: (s) => ({
+        // Strip pin from waiter profile — never persist credentials to localStorage
+        waiter: s.waiter ? { ...s.waiter, pin: undefined } : null,
+        settings: s.settings, theme: s.theme, deviceVenueId: s.deviceVenueId,
+        currentShiftId: s.currentShiftId, venueConfig: s.venueConfig, demoMode: s.demoMode,
+      }),
       migrate: (persisted, version) => {
-        if (version === 0) {
-          // v0 -> v1: no-op, initial version
+        const state = persisted as Record<string, unknown>;
+        if (version < 2) {
+          // v0/v1 -> v2: ensure demoMode exists (added in v2.6.0)
+          if (state.demoMode === undefined) state.demoMode = true;
+          // ensure settings has all required fields
+          if (!state.settings || typeof state.settings !== 'object') {
+            state.settings = { bridgeUrl: "http://localhost:8088", btEnabled: false, minConsumptionEur: 0 };
+          }
         }
-        return persisted as WaiterState;
+        return state as unknown as WaiterState;
       },
     }
   )

@@ -4,17 +4,23 @@ import { createClient } from "@supabase/supabase-js";
 export const runtime = "edge";
 
 function getAdmin() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  );
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) return null;
+  return createClient(url, key);
 }
 
 export async function GET(req: NextRequest) {
   const venueId = req.nextUrl.searchParams.get("venue_id");
   if (!venueId) return NextResponse.json({ error: "venue_id required" }, { status: 400 });
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(venueId)) {
+    return NextResponse.json({ error: "Invalid venue_id" }, { status: 400 });
+  }
 
   const supabaseAdmin = getAdmin();
+  if (!supabaseAdmin) {
+    return NextResponse.json({ error: "Database not configured" }, { status: 503 });
+  }
   const { data, error } = await supabaseAdmin
     .from("venues")
     .select("viva_terminals, viva_merchant_id")
