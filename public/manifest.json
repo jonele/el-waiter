@@ -1,7 +1,7 @@
 {
-  "name": "EL Waiter",
-  "short_name": "EL Waiter",
-  "description": "Εφαρμογή σερβιτόρου — EL Value",
+  "name": "Joey — EL Value",
+  "short_name": "Joey",
+  "description": "Joey — Ο σερβιτόρος σου",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

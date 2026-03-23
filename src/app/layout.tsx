@@ -12,13 +12,13 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 const inter = Inter({ subsets: ["greek", "latin"] });
 
 export const metadata: Metadata = {
-  title: "EL Σερβιτόρος",
-  description: "Εφαρμογή σερβιτόρου — EL Value",
+  title: "Joey — EL Value",
+  description: "Joey — Ο σερβιτόρος σου",
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Σερβιτόρος",
+    title: "Joey",
   },
 };
 

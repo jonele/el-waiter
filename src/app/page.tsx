@@ -18,13 +18,13 @@ const NUM_PAD = ["1","2","3","4","5","6","7","8","9","","0","⌫"];
 
 function WaiterLogo({ size = 64 }: { size?: number }) {
   return (
-    <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 200 200" fill="none" style={{ color: "#3B82F6" }}>
-      <path d="M30 110 Q100 55 170 110" stroke="currentColor" strokeWidth="10" strokeLinecap="round"/>
-      <rect x="22" y="112" width="156" height="14" rx="7" fill="currentColor"/>
-      <path d="M60 110 Q100 62 140 110" stroke="currentColor" strokeWidth="7" strokeLinecap="round"/>
-      <rect x="92" y="126" width="16" height="28" rx="8" fill="currentColor"/>
-      <rect x="68" y="150" width="64" height="14" rx="7" fill="currentColor"/>
-    </svg>
+    <img
+      src="/joey-avatar.jpg"
+      alt="Joey"
+      width={size}
+      height={size}
+      style={{ borderRadius: "50%", objectFit: "cover", border: "2px solid var(--brand, #3B82F6)" }}
+    />
   );
 }
 
@@ -272,7 +272,7 @@ export default function LoginPage() {
       <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 24, width: "100%" }}>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
           <WaiterLogo size={72} />
-          <span style={{ color: "var(--c-text)", fontSize: 18, fontWeight: 700, letterSpacing: 0.5 }}>EL Waiter</span>
+          <span style={{ color: "var(--c-text)", fontSize: 18, fontWeight: 700, letterSpacing: 0.5 }}>Joey</span>
         </div>
         <p style={{ color: "var(--c-text2)", fontSize: 14, marginTop: -16 }}>Ρύθμιση Συσκευής</p>
 
@@ -477,7 +477,7 @@ export default function LoginPage() {
         {/* Brand */}
         <div style={{ textAlign: "center" }}>
           <WaiterLogo size={64} />
-          <p style={{ color: "var(--c-text)", fontSize: 20, fontWeight: 700, marginTop: 4 }}>EL Waiter</p>
+          <p style={{ color: "var(--c-text)", fontSize: 20, fontWeight: 700, marginTop: 4 }}>Joey</p>
           <p style={{ color: "var(--c-text2)", fontSize: 14, marginTop: 2 }}>Ποιος είσαι;</p>
         </div>
 
