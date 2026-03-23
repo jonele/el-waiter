@@ -312,25 +312,28 @@ function OrderPageInner() {
   async function sendToKitchen() {
     if (!waiter || !activeTable || orderItems.length === 0) return;
     setSending(true);
+    const vid = useWaiterStore.getState().deviceVenueId || waiter.venue_id;
     const now = new Date().toISOString();
     const newOrder: DbOrder = order
       ? { ...order, items: orderItems, total, updated_at: now, synced: false }
       : {
           id: uuidv4(), table_id: activeTable.id, table_name: activeTable.name,
-          waiter_id: waiter.id, waiter_name: waiter.name, venue_id: waiter!.venue_id,
+          waiter_id: waiter.id, waiter_name: waiter.name, venue_id: vid,
           items: orderItems, total, tip: 0, status: "sent",
           created_at: now, updated_at: now, sent_at: now, synced: false,
         };
 
+    // 1. Save to local DB
     await waiterDb.orders.put(newOrder);
     await waiterDb.posTables.update(activeTable.id, { status: "occupied" });
     useWaiterStore.getState().setActiveTable({ ...activeTable, status: "occupied" });
 
+    // 2. Sync to Supabase (cloud persistence)
     let synced = false;
     if (isOnline && supabase) {
       try {
         await supabase.from("kitchen_orders").upsert({
-          id: newOrder.id, venue_id: waiter!.venue_id,
+          id: newOrder.id, venue_id: vid,
           tab_name: activeTable.name, cashier_name: waiter.name,
           items: orderItems, status: "pending", created_at: newOrder.created_at,
         });
@@ -344,6 +347,52 @@ function OrderPageInner() {
       const cnt = await waiterDb.syncQueue.count();
       useWaiterStore.getState().setPendingSyncs(cnt);
     }
+
+    // 3. Print to kitchen via EL Bridge on LAN (fire-and-forget)
+    const bridgeUrl = settings.bridgeUrl || "http://localhost:8088";
+    void (async () => {
+      try {
+        // Create order on Bridge
+        const bridgeItems = orderItems.map((item) => ({
+          product_id: item.menu_item_id,
+          product_name: item.name + (item.modifiers?.length ? ` [${item.modifiers.map((m) => m.name).join(", ")}]` : ""),
+          quantity: item.quantity,
+          unit_price_cents: Math.round((item.price + (item.modifiers || []).reduce((s, m) => s + m.price_modifier, 0)) * 100),
+          notes: item.notes || null,
+          course: 1,
+          vat_rate: 0.24,
+        }));
+
+        const createRes = await fetch(`${bridgeUrl}/api/v1/orders`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            table_id: activeTable.name,
+            waiter_id: waiter.name,
+            order_type: isTakeaway ? "takeaway" : "dine_in",
+            covers: activeTable.capacity,
+            items: bridgeItems,
+          }),
+          signal: AbortSignal.timeout(10000),
+        });
+
+        if (createRes.ok) {
+          const bridgeOrder = await createRes.json();
+          const bridgeOrderId = bridgeOrder.id || bridgeOrder.data?.id;
+          if (bridgeOrderId) {
+            // Trigger kitchen print
+            await fetch(`${bridgeUrl}/api/v1/orders/${bridgeOrderId}/send-to-kitchen`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              signal: AbortSignal.timeout(10000),
+            });
+          }
+        }
+      } catch {
+        // Bridge unreachable — order is still saved in Supabase + local DB
+        // Kitchen will see it on KDS via Supabase realtime
+      }
+    })();
 
     setOrder(newOrder);
     setSending(false);
