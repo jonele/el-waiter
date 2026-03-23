@@ -433,11 +433,30 @@ export default function TablesPage() {
     }
     // Register native push notifications (no-op on web)
     void registerPushNotifications(waiter.id, waiter.venue_id);
-    // Load staff profiles for messaging
-    void waiterDb.waiterProfiles.where("venue_id").equals(venueId || waiter.venue_id).toArray().then((profiles) => {
-      setStaffProfiles(profiles.filter((p) => p.active && p.name !== waiter.name).map((p) => ({ name: p.name, icon: p.icon || "\uD83D\uDC64" })));
-    });
-  }, [waiter, waiter!.venue_id]);
+    // Load online staff (active shifts) for messaging — refresh every 60s
+    async function loadOnlineStaff() {
+      if (!supabase || !waiter) return;
+      const vid = venueId || waiter.venue_id;
+      const { data } = await supabase
+        .from("waiter_shifts")
+        .select("waiter_id, waiter_name")
+        .eq("venue_id", vid)
+        .is("logout_at", null);
+      if (!data) return;
+      // Get icons from local profiles
+      const profiles = await waiterDb.waiterProfiles.where("venue_id").equals(vid).toArray();
+      const iconMap: Record<string, string> = {};
+      for (const p of profiles) iconMap[p.id] = p.icon || "\uD83D\uDC64";
+      setStaffProfiles(
+        data
+          .filter((s) => s.waiter_name !== waiter.name)
+          .map((s) => ({ name: s.waiter_name, icon: iconMap[s.waiter_id] || "\uD83D\uDC64" }))
+      );
+    }
+    void loadOnlineStaff();
+    const staffInterval = setInterval(loadOnlineStaff, 60000);
+    return () => clearInterval(staffInterval);
+  }, [waiter, waiter?.venue_id]);
 
   // Session exclusivity: check every 30s if our shift is still active
   useEffect(() => {
