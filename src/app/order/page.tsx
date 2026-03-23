@@ -225,15 +225,14 @@ function OrderPageInner() {
   }
 
   function handleItemTap(item: DbMenuItem) {
-    const groups = getItemModGroups(item);
-    if (groups.length > 0) {
-      // Has modifiers — show the bottom sheet
-      setModifierItem(item);
-      setModifierSelections({});
-    } else {
-      // No modifiers — instant add
-      addItemDirect(item);
-    }
+    // Always add directly — variations are opened via separate button
+    addItemDirect(item);
+  }
+
+  function handleExtrasTap(e: React.MouseEvent, item: DbMenuItem) {
+    e.stopPropagation();
+    setModifierItem(item);
+    setModifierSelections({});
   }
 
   function addItemDirect(item: DbMenuItem, mods?: OrderItemModifier[]) {
@@ -655,26 +654,40 @@ function OrderPageInner() {
             <div className="grid grid-cols-2 gap-2 px-3 pb-[calc(80px+env(safe-area-inset-bottom))] sm:grid-cols-3">
               {filtered.map((item) => {
                 const qty = itemCartQty(item.id);
+                const hasModifiers = getItemModGroups(item).length > 0;
                 return (
-                  <button
+                  <div
                     key={item.id}
-                    onClick={() => handleItemTap(item)}
-                    className={`relative flex flex-col rounded-2xl p-3 text-left min-h-[80px] transition-all active:scale-95 duration-75
+                    className={`relative flex flex-col rounded-2xl text-left min-h-[80px] transition-all
                       ${qty > 0 ? "border border-brand/50 bg-brand/10" : ""}`}
                     style={qty === 0 ? { background: "var(--c-surface2)" } : {}}
                   >
-                    <span className="text-sm font-semibold leading-snug line-clamp-2 flex-1" style={{ color: "var(--c-text)" }}>
-                      {decodeUnicodeEscapes(item.name)}
-                    </span>
-                    <span className="text-accent font-bold text-sm mt-1.5">
-                      {item.price.toFixed(2)}€
-                    </span>
+                    <button
+                      onClick={() => handleItemTap(item)}
+                      className="flex-1 flex flex-col p-3 text-left active:scale-95 transition-all duration-75"
+                    >
+                      <span className="text-sm font-semibold leading-snug line-clamp-2 flex-1" style={{ color: "var(--c-text)" }}>
+                        {decodeUnicodeEscapes(item.name)}
+                      </span>
+                      <span className="text-accent font-bold text-sm mt-1.5">
+                        {item.price.toFixed(2)}€
+                      </span>
+                    </button>
+                    {hasModifiers && (
+                      <button
+                        onClick={(e) => handleExtrasTap(e, item)}
+                        className="mx-2 mb-2 px-2 py-1 rounded-lg text-[11px] font-bold tracking-wide text-center transition-colors"
+                        style={{ background: "var(--c-brand-dim, rgba(99,102,241,0.15))", color: "var(--c-brand, #818cf8)" }}
+                      >
+                        EXTRAS
+                      </button>
+                    )}
                     {qty > 0 && (
                       <span className="absolute top-2 right-2 w-6 h-6 rounded-full bg-brand text-white text-xs font-black flex items-center justify-center">
                         {qty}
                       </span>
                     )}
-                  </button>
+                  </div>
                 );
               })}
             </div>
