@@ -6,6 +6,7 @@ import { useWaiterStore } from "@/store/waiterStore";
 import { supabase, decodeUnicodeEscapes } from "@/lib/supabase";
 // BottomNav removed — all navigation in top header
 import PinchZoomContainer from "@/components/PinchZoomContainer";
+import QRScanner from "@/components/QRScanner";
 import { registerPushNotifications } from "@/lib/pushNotifications";
 import { pullVenueConfig } from "@/lib/venueConfig";
 import type { DbTable, DbFloorSection, DbOrder, RsrvReservation, WaitlistEntry } from "@/lib/waiterDb";
@@ -159,6 +160,13 @@ export default function TablesPage() {
   // View mode: keypad (default/primary), map (grid), list (open tables)
   const [viewMode, setViewMode] = useState<"keypad" | "map" | "list">("map");
 
+  // Check-in state
+  const [showCheckin, setShowCheckin] = useState(false);
+  const [checkinQuery, setCheckinQuery] = useState("");
+  const [checkinResults, setCheckinResults] = useState<RsrvReservation[]>([]);
+  const [checkinLoading, setCheckinLoading] = useState(false);
+  const [checkinScanning, setCheckinScanning] = useState(false);
+
   const venueId = deviceVenueId || waiter?.venue_id || "";
 
   // Keypad matched table (live preview)
@@ -296,6 +304,63 @@ export default function TablesPage() {
     setKeypadInput("");
     setShowNoMatch(false);
     setSplitParent(null);
+  }
+
+  // ---------- Check-in: search + seat ----------
+  async function checkinSearch(q: string) {
+    if (!q.trim() || !venueId) return;
+    setCheckinLoading(true);
+    try {
+      const r = await fetch(`/api/rsrv/lookup?venueId=${encodeURIComponent(venueId)}&q=${encodeURIComponent(q.trim())}`);
+      if (r.ok) {
+        const data = await r.json();
+        setCheckinResults(data.results || []);
+      }
+    } catch {
+      setSyncError("\u0391\u03C0\u03BF\u03C4\u03C5\u03C7\u03AF\u03B1 \u03B1\u03BD\u03B1\u03B6\u03AE\u03C4\u03B7\u03C3\u03B7\u03C2");
+      setTimeout(() => setSyncError(null), 4000);
+    }
+    setCheckinLoading(false);
+  }
+
+  async function seatReservation(rsrv: RsrvReservation, table: DbTable) {
+    try {
+      await fetch("/api/rsrv/status", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ reservationId: rsrv.id, status: "seated", venueId }),
+      });
+      // Update table status
+      if (supabase && table.id) {
+        void supabase.from("pos_tables").update({
+          status: "occupied",
+          seated_customer_name: rsrv.customer_name,
+          seated_covers: rsrv.party_size,
+        }).eq("id", table.id);
+      }
+      await waiterDb.posTables.update(table.id, { status: "occupied" });
+      setTables((prev) => prev.map((t) => t.id === table.id ? { ...t, status: "occupied", seated_customer_name: rsrv.customer_name, seated_covers: rsrv.party_size } : t));
+      setShowCheckin(false);
+      setCheckinQuery("");
+      setCheckinResults([]);
+      void fetchReservations();
+    } catch {
+      setSyncError("\u0391\u03C0\u03BF\u03C4\u03C5\u03C7\u03AF\u03B1 check-in");
+      setTimeout(() => setSyncError(null), 4000);
+    }
+  }
+
+  function handleCheckinQrScan(raw: string) {
+    const val = raw.trim();
+    setCheckinScanning(false);
+    // Extract confirmation code from QR (could be URL or plain code)
+    let code = val;
+    try {
+      const url = new URL(val);
+      code = url.searchParams.get("code") || url.pathname.split("/").pop() || val;
+    } catch { /* plain code */ }
+    setCheckinQuery(code);
+    void checkinSearch(code);
   }
 
   // ---------- Reservation fetch ----------
@@ -836,6 +901,14 @@ export default function TablesPage() {
             title="Takeaway"
           >
             {"\uD83D\uDECD\uFE0F"}{theme === "beach" && <span className="text-xs font-black">TAKE</span>}
+          </button>
+          <button
+            onClick={() => { setShowCheckin(true); setCheckinResults([]); setCheckinQuery(""); }}
+            className="flex items-center justify-center w-[60px] h-[60px] text-xl transition-transform active:scale-90"
+            aria-label="Check-in κράτησης"
+            style={{ color: "var(--c-text2)" }}
+          >
+            📋
           </button>
           <button
             onClick={() => setShowMessageSheet(true)}
@@ -2019,6 +2092,160 @@ export default function TablesPage() {
                   {"\u2190 \u03A0\u03AF\u03C3\u03C9"}
                 </button>
               </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Check-in bottom sheet */}
+      {showCheckin && (
+        <div
+          className="fixed inset-0 z-50 flex flex-col justify-end"
+          onClick={(e) => { if (e.target === e.currentTarget) { setShowCheckin(false); setCheckinScanning(false); } }}
+          style={{ background: "rgba(0,0,0,0.5)" }}
+        >
+          <div
+            className="rounded-t-3xl px-4 pt-5 pb-safe max-h-[85vh] overflow-y-auto"
+            style={{ background: "var(--c-surface)", borderTop: "1px solid var(--c-border)", animation: "slideUp 0.2s ease-out" }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-lg font-black" style={{ color: "var(--c-text)" }}>
+                {"\uD83D\uDCCB"} Check-in {"\u039A\u03C1\u03AC\u03C4\u03B7\u03C3\u03B7\u03C2"}
+              </p>
+              <button
+                onClick={() => { setShowCheckin(false); setCheckinScanning(false); }}
+                className="w-10 h-10 rounded-full flex items-center justify-center"
+                style={{ background: "var(--c-surface2)", color: "var(--c-text3)" }}
+                aria-label="\u039A\u03BB\u03B5\u03AF\u03C3\u03B9\u03BC\u03BF"
+              >
+                {"\u2715"}
+              </button>
+            </div>
+
+            {/* QR scan toggle */}
+            {!checkinScanning ? (
+              <div className="flex gap-2 mb-4">
+                <button
+                  onClick={() => setCheckinScanning(true)}
+                  className="flex-1 rounded-xl py-3 text-sm font-semibold flex items-center justify-center gap-2 transition-transform active:scale-95"
+                  style={{ background: "var(--brand, #3B82F6)", color: "#fff" }}
+                  aria-label="\u03A3\u03BA\u03B1\u03BD\u03AC\u03C1\u03B9\u03C3\u03BC\u03B1 QR"
+                >
+                  {"\uD83D\uDCF7"} {"\u03A3\u03BA\u03B1\u03BD\u03AC\u03C1\u03B9\u03C3\u03BC\u03B1 QR"}
+                </button>
+              </div>
+            ) : (
+              <div className="mb-4">
+                <QRScanner onScan={handleCheckinQrScan} active={checkinScanning} />
+                <button
+                  onClick={() => setCheckinScanning(false)}
+                  className="w-full mt-2 rounded-xl py-2 text-sm font-semibold"
+                  style={{ background: "var(--c-surface2)", color: "var(--c-text2)" }}
+                >
+                  {"\u0391\u03BA\u03CD\u03C1\u03C9\u03C3\u03B7 \u03C3\u03BA\u03B1\u03BD\u03B1\u03C1\u03AF\u03C3\u03BC\u03B1\u03C4\u03BF\u03C2"}
+                </button>
+              </div>
+            )}
+
+            {/* Search input */}
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={checkinQuery}
+                onChange={(e) => setCheckinQuery(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") void checkinSearch(checkinQuery); }}
+                placeholder={"\u038C\u03BD\u03BF\u03BC\u03B1, \u03C4\u03B7\u03BB\u03AD\u03C6\u03C9\u03BD\u03BF, \u03AE \u03BA\u03C9\u03B4\u03B9\u03BA\u03CC\u03C2 RSRV..."}
+                className="flex-1 rounded-xl px-4 py-3 text-sm outline-none"
+                style={{ background: "var(--c-surface2)", color: "var(--c-text)", border: "1.5px solid var(--c-border)" }}
+              />
+              <button
+                onClick={() => void checkinSearch(checkinQuery)}
+                disabled={!checkinQuery.trim() || checkinLoading}
+                className="rounded-xl px-5 py-3 text-sm font-bold transition-transform active:scale-95 disabled:opacity-40"
+                style={{ background: "var(--brand, #3B82F6)", color: "#fff" }}
+                aria-label="\u0391\u03BD\u03B1\u03B6\u03AE\u03C4\u03B7\u03C3\u03B7"
+              >
+                {checkinLoading ? "..." : "\uD83D\uDD0D"}
+              </button>
+            </div>
+
+            {/* Results */}
+            {checkinResults.length > 0 && (
+              <div className="space-y-2 mb-4">
+                <p className="text-xs font-bold uppercase tracking-wide" style={{ color: "var(--c-text3)" }}>
+                  {"\u0392\u03C1\u03AD\u03B8\u03B7\u03BA\u03B1\u03BD"} {checkinResults.length} {"\u03BA\u03C1\u03B1\u03C4\u03AE\u03C3\u03B5\u03B9\u03C2"}
+                </p>
+                {checkinResults.map((rsrv) => (
+                  <div
+                    key={rsrv.id}
+                    className="rounded-2xl px-4 py-3"
+                    style={{ background: "var(--c-surface2)", border: "1px solid var(--c-border)" }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <div>
+                        <p className="font-bold text-sm" style={{ color: "var(--c-text)" }}>{rsrv.customer_name}</p>
+                        <p className="text-xs" style={{ color: "var(--c-text2)" }}>
+                          {rsrv.reservation_time?.slice(0, 5)} {"\u00B7"} {rsrv.party_size} {"\u03AC\u03C4\u03BF\u03BC\u03B1"}
+                          {rsrv.customer_phone && ` \u00B7 ${rsrv.customer_phone}`}
+                        </p>
+                      </div>
+                      <span
+                        className="px-2 py-0.5 rounded-full text-[10px] font-bold"
+                        style={{
+                          background: rsrv.status === "confirmed" ? "rgba(59,130,246,0.2)" : rsrv.status === "seated" ? "rgba(34,197,94,0.2)" : "rgba(245,158,11,0.2)",
+                          color: rsrv.status === "confirmed" ? "#60a5fa" : rsrv.status === "seated" ? "#22c55e" : "#f59e0b",
+                        }}
+                      >
+                        {rsrv.status === "confirmed" ? "\u0395\u03C0\u03B9\u03B2\u03B5\u03B2\u03B1\u03B9\u03C9\u03BC\u03AD\u03BD\u03B7" : rsrv.status === "seated" ? "\u039A\u03B1\u03B8\u03B9\u03C3\u03BC\u03AD\u03BD\u03BF\u03B9" : rsrv.status}
+                      </span>
+                    </div>
+                    {rsrv.status !== "seated" && rsrv.status !== "completed" && rsrv.status !== "cancelled" && (
+                      <div className="flex gap-2 mt-2">
+                        {/* Quick seat to assigned table */}
+                        {rsrv.table_id && (
+                          <button
+                            onClick={() => {
+                              const tbl = tables.find((t) => t.id === rsrv.table_id) || tables.find((t) => t.name === rsrv.table_name);
+                              if (tbl) void seatReservation(rsrv, tbl);
+                            }}
+                            className="flex-1 rounded-xl py-2.5 text-sm font-bold transition-transform active:scale-95"
+                            style={{ background: "var(--brand, #3B82F6)", color: "#fff" }}
+                          >
+                            {"\u2713"} Seat {"\u2192"} {rsrv.table_name || "?"}
+                          </button>
+                        )}
+                        {/* Pick table to seat */}
+                        {!rsrv.table_id && (
+                          <button
+                            onClick={() => {
+                              setSelectedRsrv(rsrv);
+                              setRsrvAssignMode(true);
+                              setShowCheckin(false);
+                            }}
+                            className="flex-1 rounded-xl py-2.5 text-sm font-bold transition-transform active:scale-95"
+                            style={{ background: "rgba(59,130,246,0.15)", color: "var(--brand, #3B82F6)", border: "1px solid var(--brand, #3B82F6)" }}
+                          >
+                            {"\u0395\u03C0\u03B9\u03BB\u03BF\u03B3\u03AE \u03C4\u03C1\u03B1\u03C0\u03B5\u03B6\u03B9\u03BF\u03CD"}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {rsrv.status === "seated" && (
+                      <p className="text-xs mt-1 font-semibold" style={{ color: "#22c55e" }}>
+                        {"\u2713 \u0397\u03B4\u03B7 \u03BA\u03B1\u03B8\u03B9\u03C3\u03BC\u03AD\u03BD\u03BF\u03B9"}
+                        {rsrv.table_name && ` — ${rsrv.table_name}`}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {checkinResults.length === 0 && checkinQuery && !checkinLoading && (
+              <p className="text-center text-sm py-4" style={{ color: "var(--c-text3)" }}>
+                {"\u0394\u03B5\u03BD \u03B2\u03C1\u03AD\u03B8\u03B7\u03BA\u03B5 \u03BA\u03C1\u03AC\u03C4\u03B7\u03C3\u03B7 \u03B3\u03B9\u03B1"} "{checkinQuery}"
+              </p>
             )}
           </div>
         </div>
