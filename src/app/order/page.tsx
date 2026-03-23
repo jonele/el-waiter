@@ -323,10 +323,14 @@ function OrderPageInner() {
           created_at: now, updated_at: now, sent_at: now, synced: false,
         };
 
-    // 1. Save to local DB
+    // 1. Save to local DB + update table status everywhere
     await waiterDb.orders.put(newOrder);
     await waiterDb.posTables.update(activeTable.id, { status: "occupied" });
     useWaiterStore.getState().setActiveTable({ ...activeTable, status: "occupied" });
+    // Push table status to Supabase so other waiters see it in real-time
+    if (supabase && activeTable.id && !activeTable.id.startsWith("temp-")) {
+      void supabase.from("pos_tables").update({ status: "occupied" }).eq("id", activeTable.id);
+    }
 
     // 2. Sync to Supabase (cloud persistence)
     let synced = false;
