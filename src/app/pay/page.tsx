@@ -32,7 +32,7 @@ interface SplitPayment {
 
 export default function PayPage() {
   const router = useRouter();
-  const { waiter, activeTable, settings, deviceVenueId } = useWaiterStore();
+  const { waiter, activeTable, settings, deviceVenueId, venueConfig } = useWaiterStore();
   const [order, setOrder] = useState<DbOrder | null>(null);
   const [method, setMethod] = useState<PaymentMethod>("card_lan");
   const [processing, setProcessing] = useState(false);
@@ -284,6 +284,47 @@ export default function PayPage() {
       setShowTerminalPicker(true);
     } else {
       void pay();
+    }
+  }
+
+  // ── SoftPOS: launch Viva on same device ─────────────────────────────────
+  async function handleSoftPos() {
+    if (!order || !activeTable) return;
+    setProcessing(true);
+    setStatusMsg("\u0394\u03B7\u03BC\u03B9\u03BF\u03C5\u03C1\u03B3\u03AF\u03B1 \u03C0\u03BB\u03B7\u03C1\u03C9\u03BC\u03AE\u03C2...");
+    try {
+      const merchantId = venueConfig?.viva_merchant_id;
+      if (!merchantId) {
+        setStatusMsg("\u0394\u03B5\u03BD \u03AD\u03C7\u03B5\u03B9 \u03C1\u03C5\u03B8\u03BC\u03B9\u03C3\u03C4\u03B5\u03AF Viva merchant. \u0395\u03BB\u03AD\u03B3\u03BE\u03C4\u03B5 \u03C1\u03C5\u03B8\u03BC\u03AF\u03C3\u03B5\u03B9\u03C2.");
+        setProcessing(false);
+        return;
+      }
+      const amountCents = Math.round(chargeAmount * 100);
+      const tipCents = Math.round(tip * 100);
+      const r = await fetch("/api/viva/softpos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          amount_cents: amountCents + tipCents,
+          merchant_id: merchantId,
+          order_id: order.id,
+          table_name: activeTable.name,
+          tip_cents: tipCents,
+        }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({ error: "Unknown" }));
+        setStatusMsg(`\u0391\u03C0\u03BF\u03C4\u03C5\u03C7\u03AF\u03B1: ${err.error}`);
+        setProcessing(false);
+        return;
+      }
+      const { uri } = await r.json();
+      // Launch Viva Terminal app on same device
+      window.location.href = uri;
+      // Don't setProcessing(false) — we're leaving the page
+    } catch (err) {
+      setStatusMsg(`\u0391\u03C0\u03BF\u03C4\u03C5\u03C7\u03AF\u03B1: ${err instanceof Error ? err.message : "\u0395\u03BB\u03AD\u03B3\u03BE\u03C4\u03B5 \u03C3\u03CD\u03BD\u03B4\u03B5\u03C3\u03B7"}`);
+      setProcessing(false);
     }
   }
 
@@ -564,7 +605,8 @@ export default function PayPage() {
           <div className="space-y-2">
             <p className="text-gray-400 text-sm font-medium">Τρόπος πληρωμής</p>
             {([
-              { id: "card_lan" as PaymentMethod, label: "💳 Κάρτα", desc: terminals.length > 0 ? `Viva ISV — ${terminals.length} τερματικό${terminals.length > 1 ? "ά" : ""}` : "Viva ISV" },
+              { id: "softpos"  as PaymentMethod, label: "📲 SoftPOS", desc: "Πληρωμή στο κινητό (NFC)" },
+              { id: "card_lan" as PaymentMethod, label: "💳 Κάρτα (Τερματικό)", desc: terminals.length > 0 ? `Viva ISV — ${terminals.length} τερματικό${terminals.length > 1 ? "ά" : ""}` : "Viva ISV — PAX" },
               { id: "cash"     as PaymentMethod, label: "💵 Μετρητά",       desc: "" },
               { id: "preorder" as PaymentMethod, label: "📱 Προπαραγγελία", desc: "EL-Loyal / RSRV" },
             ] as { id: PaymentMethod; label: string; desc: string }[]).map((m) => (
@@ -626,7 +668,7 @@ export default function PayPage() {
             </div>
           )}
           <button
-            onClick={method === "card_lan" ? handleCardTap : pay}
+            onClick={method === "softpos" ? handleSoftPos : method === "card_lan" ? handleCardTap : pay}
             disabled={!order || !isReadyToPay || (method === "card_lan" && terminals.length > 1 && !selectedTerminal)}
             className="w-full rounded-2xl bg-green-600 py-4 font-bold text-white text-xl touch-btn disabled:opacity-40 transition-opacity"
           >
@@ -665,8 +707,9 @@ export default function PayPage() {
 
 const METHOD_LABEL: Record<PaymentMethod, string> = {
   cash: "Μετρητά",
-  card_lan: "Κάρτα",
+  card_lan: "Κάρτα (Τερματικό)",
   card_bt: "Κάρτα (Bluetooth)",
+  softpos: "SoftPOS (NFC)",
   preorder: "Προπαραγγελία",
 };
 

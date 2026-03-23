@@ -77,7 +77,7 @@ export interface DbOrderItem {
   modifiers?: OrderItemModifier[];
 }
 
-export type PaymentMethod = "cash" | "card_lan" | "card_bt" | "preorder";
+export type PaymentMethod = "cash" | "card_lan" | "card_bt" | "softpos" | "preorder";
 
 export interface DbOrder {
   id: string;

@@ -11,6 +11,7 @@ const METHOD_LABEL: Record<PaymentMethod, string> = {
   cash:     "Μετρητά",
   card_lan: "Κάρτα",
   card_bt:  "Κάρτα BT",
+  softpos:  "SoftPOS",
   preorder: "Προπαραγγελία",
 };
 
@@ -18,6 +19,7 @@ const METHOD_ICON: Record<PaymentMethod, string> = {
   cash:     "💵",
   card_lan: "💳",
   card_bt:  "🔵",
+  softpos:  "📲",
   preorder: "📱",
 };
 
