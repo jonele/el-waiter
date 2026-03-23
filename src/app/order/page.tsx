@@ -103,6 +103,8 @@ function OrderPageInner() {
   async function loadData() {
     const vid = useWaiterStore.getState().deviceVenueId || waiter?.venue_id || "";
     if (!vid || !activeTable) return;
+
+    // ── STEP 1: Load from local DB FIRST (instant, works offline) ──
     const [cats, existingOrder] = await Promise.all([
       waiterDb.menuCategories.where("venue_id").equals(vid).sortBy("sort_order"),
       getOpenOrder(activeTable.id),
@@ -115,78 +117,93 @@ function OrderPageInner() {
       setOrderItems(existingOrder.items);
     }
 
-    // Always fetch fresh from Supabase when online
-    if (isOnline && supabase && vid) {
-      const [{ data: dbCats }, { data: dbItems }, { data: dbGroups }, { data: dbMods }, { data: dbGroupCats }] = await Promise.all([
-        supabase.from("menu_categories").select("*").eq("venue_id", vid).eq("is_active", true),
-        supabase.from("menu_items").select("*").eq("venue_id", vid).eq("is_active", true).eq("is_available", true),
-        supabase.from("pos_modifier_groups").select("*").eq("venue_id", vid).eq("is_active", true).order("sort_order"),
-        supabase.from("pos_modifiers").select("*").eq("venue_id", vid).eq("is_active", true).order("sort_order"),
-        supabase.from("pos_modifier_group_categories").select("*").eq("venue_id", vid),
-      ]);
-      if (dbCats) await waiterDb.menuCategories.bulkPut(dbCats);
-      if (dbItems) await waiterDb.menuItems.bulkPut(dbItems);
-      const freshCats = await waiterDb.menuCategories.where("venue_id").equals(vid).sortBy("sort_order");
-      activeCats = freshCats.filter((c) => c.is_active);
-      setCategories(activeCats);
-
-      // Build modifier groups with their options
-      if (dbGroups && dbMods) {
-        const groups: ModifierGroup[] = dbGroups.map((g) => ({
-          id: g.id,
-          name: g.name,
-          display_name: g.display_name,
-          selection_type: g.selection_type as "single" | "multi",
-          is_required: g.is_required,
-          sort_order: g.sort_order,
-          options: (dbMods || [])
-            .filter((m) => m.group_id === g.id)
-            .map((m) => ({ id: m.id, name: m.name, code: m.code, price_modifier: Number(m.price_modifier) || 0, sort_order: m.sort_order }))
-            .sort((a, b) => a.sort_order - b.sort_order),
-        }));
-        setModifierGroups(groups);
-      }
-
-      // Build category → modifier group mapping
-      if (dbGroupCats) {
-        const catMap: Record<string, string[]> = {};
-        for (const gc of dbGroupCats) {
-          if (!catMap[gc.category_id]) catMap[gc.category_id] = [];
-          catMap[gc.category_id].push(gc.group_id);
-        }
-        setCategoryModGroupIds(catMap);
-      }
+    // Set first category + load items immediately from local DB
+    if (activeCats.length > 0) {
+      setActiveCategory(activeCats[0].id);
+      void loadItems(activeCats[0].id);
     }
 
-    // Set first category and load its items immediately
-    const firstCatId = activeCats[0]?.id ?? "";
-    if (firstCatId) {
-      setActiveCategory(firstCatId);
-      void loadItems(firstCatId);
+    // ── STEP 2: Background sync from Supabase (non-blocking) ──
+    if (isOnline && supabase && vid) {
+      void (async () => {
+        try {
+          const [{ data: dbCats }, { data: dbItems }, { data: dbGroups }, { data: dbMods }, { data: dbGroupCats }] = await Promise.all([
+            supabase.from("menu_categories").select("*").eq("venue_id", vid).eq("is_active", true),
+            supabase.from("menu_items").select("*").eq("venue_id", vid).eq("is_active", true).eq("is_available", true),
+            supabase.from("pos_modifier_groups").select("*").eq("venue_id", vid).eq("is_active", true).order("sort_order"),
+            supabase.from("pos_modifiers").select("*").eq("venue_id", vid).eq("is_active", true).order("sort_order"),
+            supabase.from("pos_modifier_group_categories").select("*").eq("venue_id", vid),
+          ]);
+          // Cache to local DB for offline use
+          if (dbCats) await waiterDb.menuCategories.bulkPut(dbCats);
+          if (dbItems) await waiterDb.menuItems.bulkPut(dbItems);
+
+          // Refresh UI only if we got new data
+          if (dbCats) {
+            const freshCats = await waiterDb.menuCategories.where("venue_id").equals(vid).sortBy("sort_order");
+            activeCats = freshCats.filter((c) => c.is_active);
+            setCategories(activeCats);
+            // Reload items for active category with fresh data
+            if (activeCats.length > 0) void loadItems(activeCats[0].id);
+          }
+
+          // Build modifier groups with their options
+          if (dbGroups && dbMods) {
+            const groups: ModifierGroup[] = dbGroups.map((g) => ({
+              id: g.id,
+              name: g.name,
+              display_name: g.display_name,
+              selection_type: g.selection_type as "single" | "multi",
+              is_required: g.is_required,
+              sort_order: g.sort_order,
+              options: (dbMods || [])
+                .filter((m) => m.group_id === g.id)
+                .map((m) => ({ id: m.id, name: m.name, code: m.code, price_modifier: Number(m.price_modifier) || 0, sort_order: m.sort_order }))
+                .sort((a, b) => a.sort_order - b.sort_order),
+            }));
+            setModifierGroups(groups);
+          }
+
+          // Build category → modifier group mapping
+          if (dbGroupCats) {
+            const catMap: Record<string, string[]> = {};
+            for (const gc of dbGroupCats) {
+              if (!catMap[gc.category_id]) catMap[gc.category_id] = [];
+              catMap[gc.category_id].push(gc.group_id);
+            }
+            setCategoryModGroupIds(catMap);
+          }
+        } catch {
+          // Supabase sync failed — local data is still available
+        }
+      })();
     }
   }
 
   async function loadItems(catId: string) {
     if (!catId) return;
-    let its = await waiterDb.menuItems
+    // Load from local DB first (instant)
+    const its = await waiterDb.menuItems
       .where("category_id").equals(catId)
       .and((i) => i.is_active && i.is_available)
       .sortBy("sort_order");
-    // Fallback: if local DB empty for this category, fetch from Supabase
-    if (its.length === 0 && isOnline && supabase) {
-      const { data } = await supabase
-        .from("menu_items")
-        .select("*")
-        .eq("category_id", catId)
-        .eq("is_active", true)
-        .eq("is_available", true)
-        .order("sort_order");
-      if (data && data.length > 0) {
-        await waiterDb.menuItems.bulkPut(data);
-        its = data as DbMenuItem[];
-      }
-    }
     setItems(its);
+    // If local is empty and online, fetch in background and update
+    if (its.length === 0 && isOnline && supabase) {
+      void (async () => {
+        const { data } = await supabase
+          .from("menu_items")
+          .select("*")
+          .eq("category_id", catId)
+          .eq("is_active", true)
+          .eq("is_available", true)
+          .order("sort_order");
+        if (data && data.length > 0) {
+          await waiterDb.menuItems.bulkPut(data);
+          setItems(data as DbMenuItem[]);
+        }
+      })();
+    }
   }
 
   useEffect(() => { if (activeCategory) loadItems(activeCategory); }, [activeCategory]);
