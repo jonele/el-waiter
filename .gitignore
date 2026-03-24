@@ -14,3 +14,4 @@ src-tauri/target/
 *\ 3.*
 dist/
 test-results/
+.env*.local

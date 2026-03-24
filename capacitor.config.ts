@@ -3,9 +3,9 @@ import type { CapacitorConfig } from "@capacitor/cli";
 const config: CapacitorConfig = {
   appId: "com.elvalue.joey",
   appName: "Joey",
-  webDir: "capacitor-shell",
+  webDir: "out",
   server: {
-    url: "https://el-waiter.vercel.app",
+    // No url — loads bundled static export locally for native plugin access
     cleartext: true, // Allow HTTP to LAN printers
     androidScheme: "https",
   },

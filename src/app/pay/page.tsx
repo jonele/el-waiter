@@ -9,8 +9,7 @@ import SplitModeSelector, { type SplitMode } from "@/components/SplitModeSelecto
 import ItemSplitPicker from "@/components/ItemSplitPicker";
 import EqualSplitPicker from "@/components/EqualSplitPicker";
 
-// Tauri mobile builds call Vercel API routes over HTTPS via NEXT_PUBLIC_API_BASE
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? "";
+import { API_BASE } from "@/lib/apiBase";
 
 const QUICK_TIPS = [0.5, 1, 2, 5];
 const POLL_INTERVAL_MS = 3000;
@@ -343,7 +342,7 @@ export default function PayPage() {
       }
       const amountCents = Math.round(chargeAmount * 100);
       const tipCents = Math.round(tip * 100);
-      const r = await fetch("/api/viva/softpos", {
+      const r = await fetch(`${API_BASE}/api/viva/softpos`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

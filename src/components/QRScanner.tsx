@@ -21,15 +21,20 @@ export default function QRScanner({ onScan, active }: Props) {
     let rafId = 0;
     let stream: MediaStream | null = null;
 
-    navigator.mediaDevices
-      .getUserMedia({ video: { facingMode: "environment" } })
-      .then((s) => {
+    async function startCamera() {
+      try {
+        const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
         if (stopped) { s.getTracks().forEach((t) => t.stop()); return; }
         stream = s;
         const video = videoRef.current;
         if (!video) return;
         video.srcObject = s;
-        video.play().catch(() => {});
+        // Force play — Capacitor WebView may block autoplay
+        try { await video.play(); } catch {
+          // Retry after brief delay (Android WebView needs a tick)
+          await new Promise(r => setTimeout(r, 300));
+          try { await video.play(); } catch { /* still failed */ }
+        }
 
         function tick() {
           if (stopped) return;
@@ -54,8 +59,9 @@ export default function QRScanner({ onScan, active }: Props) {
           rafId = requestAnimationFrame(tick);
         }
         rafId = requestAnimationFrame(tick);
-      })
-      .catch(() => setCameraError(true));
+      } catch { setCameraError(true); }
+    }
+    void startCamera();
 
     return () => {
       stopped = true;
@@ -85,6 +91,7 @@ export default function QRScanner({ onScan, active }: Props) {
     <div style={{ position: "relative", width: "100%", maxWidth: 320, aspectRatio: "1", margin: "0 auto" }}>
       <video
         ref={videoRef}
+        autoPlay
         muted
         playsInline
         style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: 16, display: "block" }}

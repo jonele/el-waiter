@@ -12,6 +12,7 @@ import { pullVenueConfig } from "@/lib/venueConfig";
 import type { DbTable, DbFloorSection, DbOrder, RsrvReservation, WaitlistEntry } from "@/lib/waiterDb";
 import type { Theme } from "@/store/waiterStore";
 import type { BillRequest } from "@/lib/supabase";
+import { API_BASE } from "@/lib/apiBase";
 
 // Premium table card styles — ported from RSRV FloorPlanTheme
 function getStatusStyle(status: string, isDark: boolean) {
@@ -337,7 +338,7 @@ export default function TablesPage() {
     if (!q.trim() || !venueId) return;
     setCheckinLoading(true);
     try {
-      const r = await fetch(`/api/rsrv/lookup?venueId=${encodeURIComponent(venueId)}&q=${encodeURIComponent(q.trim())}`);
+      const r = await fetch(`${API_BASE}/api/rsrv/lookup?venueId=${encodeURIComponent(venueId)}&q=${encodeURIComponent(q.trim())}`);
       if (r.ok) {
         const data = await r.json();
         setCheckinResults(data.results || []);
@@ -351,7 +352,7 @@ export default function TablesPage() {
 
   async function seatReservation(rsrv: RsrvReservation, table: DbTable) {
     try {
-      await fetch("/api/rsrv/status", {
+      await fetch(`${API_BASE}/api/rsrv/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reservationId: rsrv.id, status: "seated", venueId }),
@@ -394,7 +395,7 @@ export default function TablesPage() {
     if (!venueId) return;
     setRsrvLoading(true);
     try {
-      const r = await fetch(`/api/rsrv/reservations?venueId=${encodeURIComponent(venueId)}&date=${todayStr()}`);
+      const r = await fetch(`${API_BASE}/api/rsrv/reservations?venueId=${encodeURIComponent(venueId)}&date=${todayStr()}`);
       if (r.ok) {
         const data = await r.json();
         setReservations(Array.isArray(data) ? data : (data.reservations ?? []));
@@ -411,7 +412,7 @@ export default function TablesPage() {
     if (!venueId) return;
     setWaitLoading(true);
     try {
-      const r = await fetch(`/api/rsrv/waitlist?venueId=${encodeURIComponent(venueId)}`);
+      const r = await fetch(`${API_BASE}/api/rsrv/waitlist?venueId=${encodeURIComponent(venueId)}`);
       if (r.ok) {
         const data = await r.json();
         setWaitlist(Array.isArray(data) ? data : (data.waitlist ?? []));
@@ -733,7 +734,7 @@ export default function TablesPage() {
 
   // ---------- RSRV actions ----------
   async function patchRsrvStatus(reservationId: string, status: string) {
-    await fetch("/api/rsrv/status", {
+    await fetch(`${API_BASE}/api/rsrv/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reservationId, status, venueId }),
@@ -744,7 +745,7 @@ export default function TablesPage() {
   }
 
   async function assignTableToRsrv(rsrv: RsrvReservation, table: DbTable) {
-    await fetch("/api/rsrv/status", {
+    await fetch(`${API_BASE}/api/rsrv/status`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reservationId: rsrv.id, status: "seated", venueId, table_id: table.id }),
@@ -759,7 +760,7 @@ export default function TablesPage() {
     if (!walkInTable || wiSubmitting) return;
     setWiSubmitting(true);
     try {
-      await fetch("/api/rsrv/create", {
+      await fetch(`${API_BASE}/api/rsrv/create`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -796,7 +797,7 @@ export default function TablesPage() {
   // ---------- Waitlist add ----------
   async function addToWaitlist() {
     if (!wlName.trim()) return;
-    await fetch("/api/rsrv/waitlist", {
+    await fetch(`${API_BASE}/api/rsrv/waitlist`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -887,7 +888,7 @@ export default function TablesPage() {
 
   async function assignTableToWl(wl: WaitlistEntry, table: DbTable) {
     // Create a reservation from waitlist entry, then seat them
-    await fetch("/api/rsrv/create", {
+    await fetch(`${API_BASE}/api/rsrv/create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -930,7 +931,7 @@ export default function TablesPage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="font-bold text-base" style={{ color: "var(--brand, #3B82F6)" }}>Joey</span>
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.7.0</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.8.1</span>
               {useWaiterStore.getState().demoMode && (
                 <span className="px-1.5 py-0.5 text-[9px] font-bold rounded" style={{ background: "#f59e0b", color: "#000" }}>DEMO</span>
               )}

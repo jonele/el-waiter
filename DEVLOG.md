@@ -1,4 +1,30 @@
 
+## 2026-03-24 — Joey v2.8.0: Bundled Native Android Build
+
+### Architecture Change: Remote → Bundled
+- **BEFORE**: Capacitor shell loaded web UI from `el-waiter.vercel.app` (no native plugins)
+- **AFTER**: Static HTML/JS bundled in APK, API routes stay on Vercel as serverless functions
+- Native SQLite, TCP printing, and SoftPOS now all work (Capacitor plugin bridge accessible)
+
+### Changes
+- Created `src/lib/apiBase.ts` — shared `API_BASE` constant for all client → Vercel API calls
+- Prefixed 11 fetch calls across `tables/page.tsx` (10) and `pay/page.tsx` (1) with `API_BASE`
+- Updated `capacitor.config.ts` — `webDir: "out"`, removed `server.url` (loads locally)
+- Created `scripts/build-cap.sh` — excludes API routes + setup route during static export, restores on exit
+- Updated `package.json` scripts: `build:cap`, `cap:android`, `cap:ios`
+- Fixed `setup/[venueId]/page.tsx` to use proper component wrapper (re-export pattern broke Next.js 15 static)
+- Cleaned duplicate files from `public/` (macOS copy artifacts)
+
+### Build Output
+- Static export: 7 pages (3.4MB total in `out/`)
+- Android sync: 4 Capacitor plugins (SQLite, SplashScreen, StatusBar, TCP Socket)
+- Vercel build: all 13 API routes + 8 pages still work normally
+
+### Next Steps
+- Open in Android Studio: `npx cap open android`
+- Generate signed APK → test on Xiaomi
+- iOS: `npx cap sync ios && npx cap open ios` → Xcode build
+
 ## 2026-03-23 — EL-Waiter v2.5.0: Kitchen Print + Check-in + Real-time Sync
 
 ### Kitchen Printing via Bridge

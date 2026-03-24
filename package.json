@@ -1,6 +1,6 @@
 {
   "name": "el-waiter",
-  "version": "2.7.0",
+  "version": "2.8.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -8,9 +8,10 @@
     "build:tauri": "NEXT_PUBLIC_TAURI=1 next build",
     "start": "next start",
     "tauri": "tauri",
-    "build:cap": "NEXT_PUBLIC_CAP=1 next build",
+    "build:cap": "bash scripts/build-cap.sh",
     "cap:sync": "npm run build:cap && npx cap sync",
-    "cap:ios": "npm run build:cap && npx cap sync ios && npx cap open ios"
+    "cap:android": "npm run build:cap && npx cap sync android",
+    "cap:ios": "npm run build:cap && npx cap sync ios"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^8.0.1",

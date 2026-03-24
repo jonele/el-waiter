@@ -323,6 +323,9 @@ export default function LoginPage() {
             {setupInput.trim().length === 0 ? "Εισάγετε Venue ID" : "Αποθήκευση →"}
           </button>
         </div>
+
+        {/* Version */}
+        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>v2.8.1</p>
       </div>
     </div>
   );
@@ -565,6 +568,9 @@ export default function LoginPage() {
         >
           ⚙️ Αλλαγή ρύθμισης συσκευής
         </button>
+
+        {/* Version */}
+        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>v2.8.1</p>
       </div>
     </div>
   );
