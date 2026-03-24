@@ -258,6 +258,11 @@ export default function PayPage() {
   // ── Main pay handler ──────────────────────────────────────────────────────
   async function pay() {
     if (!order || !activeTable || chargeAmount <= 0) return;
+    // Block Viva payments in demo mode (cash is always allowed)
+    if ((method === "card_lan" || method === "card_bt") && useWaiterStore.getState().demoMode) {
+      setStatusMsg("\uD83C\uDFAD Demo mode — \u03BA\u03AC\u03C1\u03C4\u03B5\u03C2 \u03B1\u03C0\u03B5\u03BD\u03B5\u03C1\u03B3\u03BF\u03C0\u03BF\u03B9\u03B7\u03BC\u03AD\u03BD\u03B5\u03C2. \u03A7\u03C1\u03B7\u03C3\u03B9\u03BC\u03BF\u03C0\u03BF\u03B9\u03AE\u03C3\u03C4\u03B5 \u03BC\u03B5\u03C4\u03C1\u03B7\u03C4\u03AC.");
+      return;
+    }
     setProcessing(true);
     setStatusMsg("");
 
@@ -326,6 +331,7 @@ export default function PayPage() {
   // ── SoftPOS: launch Viva on same device ─────────────────────────────────
   async function handleSoftPos() {
     if (!order || !activeTable) return;
+    if (useWaiterStore.getState().demoMode) { setStatusMsg("\uD83C\uDFAD Demo mode — \u03C0\u03BB\u03B7\u03C1\u03C9\u03BC\u03AD\u03C2 \u03B1\u03C0\u03B5\u03BD\u03B5\u03C1\u03B3\u03BF\u03C0\u03BF\u03B9\u03B7\u03BC\u03AD\u03BD\u03B5\u03C2"); return; }
     setProcessing(true);
     setStatusMsg("\u0394\u03B7\u03BC\u03B9\u03BF\u03C5\u03C1\u03B3\u03AF\u03B1 \u03C0\u03BB\u03B7\u03C1\u03C9\u03BC\u03AE\u03C2...");
     try {
