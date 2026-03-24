@@ -32,7 +32,7 @@ function getStatusStyle(status: string, isDark: boolean) {
 const THEME_CYCLE: Theme[] = ["dark", "grey", "light", "beach"];
 const THEME_ICON: Record<Theme, string> = { dark: "\uD83C\uDF19", grey: "\uD83C\uDF2B", light: "\u2600\uFE0F", beach: "\uD83C\uDFD6\uFE0F" };
 
-type PageTab = "tables" | "reservations" | "waitlist";
+type PageTab = "tables" | "reservations";
 
 const RSRV_STATUS_COLOR: Record<string, { bg: string; text: string }> = {
   pending:   { bg: "rgba(245,158,11,0.25)", text: "#fbbf24" },
@@ -423,17 +423,13 @@ export default function TablesPage() {
     setWaitLoading(false);
   }, [venueId]);
 
-  // ---------- Auto-poll reservations ----------
+  // ---------- Auto-poll reservations + waitlist ----------
   useEffect(() => {
     if (pageTab === "reservations") {
       void fetchReservations();
-      rsrvInterval.current = setInterval(fetchReservations, 30000);
-      return () => { if (rsrvInterval.current) clearInterval(rsrvInterval.current); };
-    }
-    if (pageTab === "waitlist") {
       void fetchWaitlist();
-      const iv = setInterval(fetchWaitlist, 30000);
-      return () => clearInterval(iv);
+      rsrvInterval.current = setInterval(() => { void fetchReservations(); void fetchWaitlist(); }, 30000);
+      return () => { if (rsrvInterval.current) clearInterval(rsrvInterval.current); };
     }
     return () => { if (rsrvInterval.current) clearInterval(rsrvInterval.current); };
   }, [pageTab, fetchReservations, fetchWaitlist]);
@@ -927,7 +923,7 @@ export default function TablesPage() {
 
       {/* Header */}
       <div
-        className="pt-safe sticky top-0 z-30 backdrop-blur-md border-b px-4 py-3 flex items-center justify-between"
+        className="pt-safe sticky top-0 z-30 backdrop-blur-md border-b px-3 py-2 flex items-center justify-between"
         style={{ background: "var(--c-header)", borderColor: "var(--c-border)" }}
       >
         <div className="flex items-center gap-3">
@@ -969,21 +965,8 @@ export default function TablesPage() {
 
         <div className="flex items-center -mr-2">
           <button
-            onClick={() => router.push("/order?takeaway=1")}
-            className="flex items-center justify-center gap-1 h-[60px] px-3 text-xl transition-transform active:scale-90 rounded-xl"
-            aria-label="Takeaway / Walk-in"
-            style={{
-              color: "#f59e0b",
-              background: theme === "beach" ? "rgba(245,158,11,0.15)" : "transparent",
-              border: theme === "beach" ? "2px solid rgba(245,158,11,0.4)" : "none",
-            }}
-            title="Takeaway"
-          >
-            {"\uD83D\uDECD\uFE0F"}{theme === "beach" && <span className="text-xs font-black">TAKE</span>}
-          </button>
-          <button
             onClick={() => { setShowCheckin(true); setCheckinResults([]); setCheckinQuery(""); }}
-            className="flex items-center justify-center w-[60px] h-[60px] text-xl transition-transform active:scale-90"
+            className="flex items-center justify-center w-[48px] h-[48px] text-lg transition-transform active:scale-90"
             aria-label="Check-in κράτησης"
             style={{ color: "var(--c-text2)" }}
           >
@@ -991,7 +974,7 @@ export default function TablesPage() {
           </button>
           <button
             onClick={() => setShowMessageSheet(true)}
-            className="flex items-center justify-center w-[60px] h-[60px] text-xl transition-transform active:scale-90"
+            className="flex items-center justify-center w-[48px] h-[48px] text-lg transition-transform active:scale-90"
             aria-label="Μήνυμα προσωπικού"
             style={{ color: "var(--c-text2)" }}
           >
@@ -999,14 +982,14 @@ export default function TablesPage() {
           </button>
           <button
             onClick={cycleTheme}
-            className="flex items-center justify-center w-[60px] h-[60px] text-xl transition-transform active:scale-90"
+            className="flex items-center justify-center w-[48px] h-[48px] text-lg transition-transform active:scale-90"
             aria-label="\u0391\u03BB\u03BB\u03B1\u03B3\u03AE \u03B8\u03AD\u03BC\u03B1\u03C4\u03BF\u03C2"
           >
             {THEME_ICON[theme]}
           </button>
           <button
             onClick={() => router.push("/settings")}
-            className="flex items-center justify-center w-[60px] h-[60px] transition-colors active:opacity-60"
+            className="flex items-center justify-center w-[48px] h-[48px] transition-colors active:opacity-60"
             style={{ color: "var(--c-text2)" }}
             aria-label="\u03A1\u03C5\u03B8\u03BC\u03AF\u03C3\u03B5\u03B9\u03C2"
           >
@@ -1015,85 +998,121 @@ export default function TablesPage() {
         </div>
       </div>
 
-      {/* Section tabs — only show in map/list modes, not keypad */}
-      {sections.length > 0 && pageTab === "tables" && viewMode !== "keypad" && (
+      {/* ROW 1: Main tabs — Τραπέζια | Κρατήσεις | Takeaway */}
+      <div
+        className="flex gap-1.5 px-3 py-1.5 border-b shrink-0"
+        style={{ background: "var(--c-bg)", borderColor: "var(--c-border)" }}
+      >
+        <button
+          onClick={() => setPageTab("tables")}
+          className={`flex-1 rounded-xl h-9 text-sm font-bold transition-colors flex items-center justify-center gap-1.5 ${
+            pageTab === "tables" ? "bg-brand text-white" : "active:opacity-70"
+          }`}
+          style={pageTab !== "tables" ? { background: "var(--c-surface2)", color: "var(--c-text2)" } : {}}
+        >
+          {"\uD83C\uDF7D\uFE0F"} {"\u03A4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9\u03B1"}
+        </button>
+        <button
+          onClick={() => { setPageTab("reservations"); }}
+          className={`flex-1 rounded-xl h-9 text-sm font-bold transition-colors flex items-center justify-center gap-1.5 ${
+            pageTab === "reservations" ? "bg-brand text-white" : "active:opacity-70"
+          }`}
+          style={pageTab !== "reservations" ? { background: "var(--c-surface2)", color: "var(--c-text2)" } : {}}
+        >
+          {"\uD83D\uDCCB"} {"\u039A\u03C1\u03B1\u03C4\u03AE\u03C3\u03B5\u03B9\u03C2"}
+          {(reservations.filter(r => r.status === "confirmed" || r.status === "pending").length + waitlist.length) > 0 && (
+            <span className="inline-flex items-center justify-center min-w-[18px] h-[18px] rounded-full text-[10px] font-bold" style={{ background: "rgba(255,255,255,0.25)" }}>
+              {reservations.filter(r => r.status === "confirmed" || r.status === "pending").length + waitlist.length}
+            </span>
+          )}
+        </button>
+        <button
+          onClick={() => router.push("/order?takeaway=1")}
+          className="flex-1 rounded-xl h-9 text-sm font-bold transition-colors flex items-center justify-center gap-1.5 active:opacity-70"
+          style={{ background: "var(--c-surface2)", color: "#f59e0b" }}
+        >
+          {"\uD83D\uDECD\uFE0F"} Takeaway
+        </button>
+      </div>
+
+      {/* ROW 2: Section pills + view icons — only in tables tab, non-keypad */}
+      {pageTab === "tables" && viewMode !== "keypad" && (
         <div
-          className="flex gap-2 overflow-x-auto px-4 py-2.5 border-b shrink-0"
+          className="flex items-center gap-1.5 px-3 py-1.5 border-b shrink-0"
           style={{ background: "var(--c-bg)", borderColor: "var(--c-border)" }}
         >
-          {[{ id: "all", name: "Όλα" }, ...sections.filter((sec) => tables.some((t) => t.floor_section_id === sec.id))].map((s) => (
+          {/* Section pills — scrollable */}
+          <div className="flex-1 flex gap-1.5 overflow-x-auto min-w-0">
+            {[{ id: "all", name: "\u038C\u03BB\u03B1" }, ...sections.filter((sec) => tables.some((t) => t.floor_section_id === sec.id))].map((s) => (
+              <button
+                key={s.id}
+                onClick={() => setActiveSection(s.id)}
+                className={`shrink-0 rounded-full px-3 h-8 text-xs font-semibold transition-colors ${
+                  activeSection === s.id ? "bg-brand text-white" : "active:opacity-70"
+                }`}
+                style={activeSection !== s.id ? { background: "var(--c-surface2)", color: "var(--c-text2)" } : {}}
+              >
+                {decodeUnicodeEscapes(s.name)}
+              </button>
+            ))}
+          </div>
+          {/* View toggle icons — right side: keypad (#) and open tables list */}
+          <div className="flex gap-1 shrink-0 ml-1" style={{ borderLeft: "1px solid var(--c-border)", paddingLeft: 6 }}>
             <button
-              key={s.id}
-              onClick={() => setActiveSection(s.id)}
-              className={`shrink-0 rounded-full px-4 h-10 text-sm font-medium transition-colors ${
-                activeSection === s.id ? "bg-brand text-white" : "active:opacity-70"
-              }`}
-              style={activeSection !== s.id ? { background: "var(--c-surface2)", color: "var(--c-text2)" } : {}}
+              onClick={() => setViewMode("keypad")}
+              className="w-8 h-8 rounded-lg flex items-center justify-center text-xs font-black transition-colors active:opacity-70"
+              style={{ background: "var(--c-surface2)", color: "var(--c-text2)" }}
+              aria-label="Keypad"
             >
-              {decodeUnicodeEscapes(s.name)}
+              #
             </button>
-          ))}
+            <button
+              onClick={() => { setViewMode("list"); void fetchAllOpenOrders(); }}
+              className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs transition-colors ${
+                viewMode === "list" ? "bg-brand text-white" : "active:opacity-70"
+              }`}
+              style={viewMode !== "list" ? { background: "var(--c-surface2)", color: "var(--c-text2)" } : {}}
+              aria-label="Open tables list"
+            >
+              {"\uD83D\uDCCB"}
+            </button>
+          </div>
         </div>
       )}
 
-      {/* Page-level tabs: Trapetzia | Kratiseis | Anamoni */}
-      <div
-        className="flex gap-2 overflow-x-auto px-4 py-2 border-b shrink-0"
-        style={{ background: "var(--c-bg)", borderColor: "var(--c-border)" }}
-      >
-        {([
-          { key: "tables" as PageTab, label: "\u03A4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9\u03B1" },
-          { key: "reservations" as PageTab, label: "\u039A\u03C1\u03B1\u03C4\u03AE\u03C3\u03B5\u03B9\u03C2" },
-          { key: "waitlist" as PageTab, label: "\u0391\u03BD\u03B1\u03BC\u03BF\u03BD\u03AE" },
-        ]).map((tab) => (
+      {/* ROW 2 alt: Back to grid button when in keypad mode */}
+      {pageTab === "tables" && viewMode === "keypad" && (
+        <div
+          className="flex items-center gap-1.5 px-3 py-1.5 border-b shrink-0"
+          style={{ background: "var(--c-bg)", borderColor: "var(--c-border)" }}
+        >
           <button
-            key={tab.key}
-            onClick={() => setPageTab(tab.key)}
-            className={`shrink-0 rounded-full px-5 h-10 text-sm font-semibold transition-colors ${
-              pageTab === tab.key ? "bg-brand text-white" : "active:opacity-70"
-            }`}
-            style={pageTab !== tab.key ? { background: "var(--c-surface2)", color: "var(--c-text2)" } : {}}
+            onClick={() => setViewMode("map")}
+            className="rounded-full px-3 h-8 text-xs font-semibold flex items-center gap-1.5 transition-colors active:opacity-70"
+            style={{ background: "var(--c-surface2)", color: "var(--c-text2)" }}
           >
-            {tab.label}
-            {tab.key === "reservations" && reservations.filter(r => r.status === "confirmed" || r.status === "pending").length > 0 && (
-              <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold" style={{ background: "rgba(255,255,255,0.25)" }}>
-                {reservations.filter(r => r.status === "confirmed" || r.status === "pending").length}
-              </span>
-            )}
-            {tab.key === "waitlist" && waitlist.length > 0 && (
-              <span className="ml-1.5 inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold" style={{ background: "rgba(255,255,255,0.25)" }}>
-                {waitlist.length}
-              </span>
-            )}
+            {"\uD83C\uDF7D\uFE0F"} {"\u03A4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9\u03B1"}
           </button>
-        ))}
-      </div>
+          <button
+            onClick={() => { setViewMode("list"); void fetchAllOpenOrders(); }}
+            className="rounded-full px-3 h-8 text-xs font-semibold flex items-center gap-1.5 transition-colors active:opacity-70"
+            style={{ background: "var(--c-surface2)", color: "var(--c-text2)" }}
+          >
+            {"\uD83D\uDCCB"} {"\u0391\u03BD\u03BF\u03B9\u03C7\u03C4\u03AC"}
+          </button>
+          <span className="flex-1" />
+          <span
+            className="rounded-full px-3 h-8 text-xs font-bold flex items-center"
+            style={{ background: "var(--brand, #3B82F6)", color: "#fff" }}
+          >
+            # Keypad
+          </span>
+        </div>
+      )}
 
       {/* ============ TABLES TAB ============ */}
       {pageTab === "tables" && (
         <>
-          {/* Search bar removed — keypad handles table search */}
-
-          {/* View mode toggle: Keypad / Map / Open tables */}
-          <div className="flex gap-1.5 px-4 pt-2 shrink-0">
-            {([
-              { key: "keypad" as const, label: "#" },
-              { key: "map" as const, label: "\uD83C\uDF7D\uFE0F \u03A4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9\u03B1" },
-              { key: "list" as const, label: "\u0391\u03BD\u03BF\u03B9\u03C7\u03C4\u03AC" },
-            ]).map((m) => (
-              <button
-                key={m.key}
-                onClick={() => { setViewMode(m.key); if (m.key === "list") void fetchAllOpenOrders(); }}
-                className={`flex-1 rounded-xl h-10 text-sm font-bold transition-colors ${
-                  viewMode === m.key ? "bg-brand text-white" : "active:opacity-70"
-                }`}
-                style={viewMode !== m.key ? { background: "var(--c-surface2)", color: "var(--c-text2)" } : {}}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
-
           {/* Assignment mode banner */}
           {(rsrvAssignMode || wlAssignMode) && (
             <div
@@ -1115,7 +1134,7 @@ export default function TablesPage() {
 
           {/* ---- KEYPAD VIEW (PRIMARY) ---- */}
           {viewMode === "keypad" && (
-            <div className="flex-1 flex overflow-hidden pb-[calc(16px+env(safe-area-inset-bottom))]">
+            <div className="flex-1 flex overflow-hidden">
               {/* Main numpad area */}
               <div className="flex-1 flex flex-col p-3 gap-3">
                 {/* Display: typed number + matched table info */}
@@ -1216,7 +1235,7 @@ export default function TablesPage() {
 
           {/* ---- OPEN TABLES LIST VIEW (My tables + Others) ---- */}
           {viewMode === "list" && (
-            <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(16px+env(safe-area-inset-bottom))]">
+            <div className="flex-1 overflow-y-auto px-4 py-3">
               {/* MY TABLES — from local DB */}
               {(() => {
                 const myTables = tables
@@ -1287,7 +1306,7 @@ export default function TablesPage() {
 
           {/* ---- TABLES GRID VIEW (with pinch-to-zoom) ---- */}
           {viewMode === "map" && (
-          <PinchZoomContainer className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(16px+env(safe-area-inset-bottom))]">
+          <PinchZoomContainer className="flex-1 overflow-y-auto px-4 py-3">
             {syncing && tables.length === 0 && (
               <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u03A3\u03C5\u03B3\u03C7\u03C1\u03BF\u03BD\u03B9\u03C3\u03BC\u03CC\u03C2..."}</p>
             )}
@@ -1489,118 +1508,127 @@ export default function TablesPage() {
         </>
       )}
 
-      {/* ============ RESERVATIONS TAB ============ */}
+      {/* ============ RESERVATIONS + WAITLIST TAB (combined) ============ */}
       {pageTab === "reservations" && (
-        <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(16px+env(safe-area-inset-bottom))]">
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          {/* --- Reservations section --- */}
           {rsrvLoading && reservations.length === 0 && (
-            <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u03A6\u03CC\u03C1\u03C4\u03C9\u03C3\u03B7..."}</p>
+            <p className="text-center mt-6 text-sm" style={{ color: "var(--c-text3)" }}>{"\u03A6\u03CC\u03C1\u03C4\u03C9\u03C3\u03B7..."}</p>
           )}
-          {!rsrvLoading && reservations.length === 0 && (
+          {!rsrvLoading && reservations.length === 0 && waitlist.length === 0 && (
             <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u0394\u03B5\u03BD \u03C5\u03C0\u03AC\u03C1\u03C7\u03BF\u03C5\u03BD \u03BA\u03C1\u03B1\u03C4\u03AE\u03C3\u03B5\u03B9\u03C2 \u03C3\u03AE\u03BC\u03B5\u03C1\u03B1"}</p>
           )}
-          <div className="flex flex-col gap-2">
-            {reservations.map((r) => {
-              const sc = RSRV_STATUS_COLOR[r.status] ?? RSRV_STATUS_COLOR.completed;
-              const statusLabel: Record<string, string> = {
-                pending: "\u0395\u03BA\u03BA\u03C1\u03B5\u03BC\u03AE\u03C2",
-                confirmed: "\u0395\u03C0\u03B9\u03B2\u03B5\u03B2\u03B1\u03B9\u03C9\u03BC\u03AD\u03BD\u03B7",
-                seated: "\u039A\u03AC\u03B8\u03B9\u03C3\u03B5",
-                completed: "\u039F\u03BB\u03BF\u03BA\u03BB\u03B7\u03C1\u03CE\u03B8\u03B7\u03BA\u03B5",
-                cancelled: "\u0391\u03BA\u03C5\u03C1\u03CE\u03B8\u03B7\u03BA\u03B5",
-                no_show: "No-show",
-              };
-              return (
+          {reservations.length > 0 && (
+            <>
+              <p className="text-xs font-bold uppercase tracking-wide mb-2" style={{ color: "var(--brand, #3B82F6)" }}>
+                {"\uD83D\uDCCB \u039A\u03C1\u03B1\u03C4\u03AE\u03C3\u03B5\u03B9\u03C2"} ({reservations.filter(r => r.status === "confirmed" || r.status === "pending").length})
+              </p>
+              <div className="flex flex-col gap-2 mb-4">
+                {reservations.map((r) => {
+                  const sc = RSRV_STATUS_COLOR[r.status] ?? RSRV_STATUS_COLOR.completed;
+                  const statusLabel: Record<string, string> = {
+                    pending: "\u0395\u03BA\u03BA\u03C1\u03B5\u03BC\u03AE\u03C2",
+                    confirmed: "\u0395\u03C0\u03B9\u03B2\u03B5\u03B2\u03B1\u03B9\u03C9\u03BC\u03AD\u03BD\u03B7",
+                    seated: "\u039A\u03AC\u03B8\u03B9\u03C3\u03B5",
+                    completed: "\u039F\u03BB\u03BF\u03BA\u03BB\u03B7\u03C1\u03CE\u03B8\u03B7\u03BA\u03B5",
+                    cancelled: "\u0391\u03BA\u03C5\u03C1\u03CE\u03B8\u03B7\u03BA\u03B5",
+                    no_show: "No-show",
+                  };
+                  return (
+                    <button
+                      key={r.id}
+                      onClick={() => setSelectedRsrv(r)}
+                      className="flex items-center justify-between rounded-2xl border px-4 py-3 min-h-[60px] transition-transform active:scale-[0.98]"
+                      style={{ background: "var(--c-surface)", borderColor: "var(--c-border)" }}
+                    >
+                      <div className="flex flex-col items-start gap-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          {r.source === "vip" && <span className="text-sm leading-none">{"\uD83D\uDC51"}</span>}
+                          <span className="font-bold text-sm truncate" style={{ color: "var(--c-text)" }}>
+                            {r.customer_name}
+                          </span>
+                          <span className="text-xs font-semibold" style={{ color: "var(--c-text2)" }}>
+                            {r.party_size} {"\u03AC\u03C4."}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {r.customer_phone && (
+                            <span className="text-xs" style={{ color: "var(--c-text3)" }}>{r.customer_phone}</span>
+                          )}
+                          {r.source && r.source !== "vip" && (
+                            <span className="text-xs" style={{ color: "var(--c-text3)" }}>
+                              {SOURCE_EMOJI[r.source] ?? r.source}
+                            </span>
+                          )}
+                          {r.table_name && (
+                            <span className="text-xs font-semibold" style={{ color: "#60a5fa" }}>
+                              {"\u03A4\u03C1. "}{r.table_name}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
+                        <span className="text-sm font-bold" style={{ color: "var(--c-text)" }}>
+                          {r.reservation_time.slice(0, 5)}
+                        </span>
+                        <span
+                          className="rounded-full px-2.5 py-0.5 text-[10px] font-bold"
+                          style={{ background: sc.bg, color: sc.text }}
+                        >
+                          {statusLabel[r.status] ?? r.status}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* --- Waitlist section (inline under reservations) --- */}
+          <div className="mt-2">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-bold uppercase tracking-wide" style={{ color: "#fbbf24" }}>
+                {"\u23F3 \u0391\u03BD\u03B1\u03BC\u03BF\u03BD\u03AE"} ({waitlist.length})
+              </p>
+              <button
+                onClick={() => setShowAddWaitlist(true)}
+                className="rounded-full px-3 h-7 text-xs font-bold flex items-center gap-1 transition-transform active:scale-95"
+                style={{ background: "rgba(59,130,246,0.15)", color: "#60a5fa" }}
+              >
+                + {"\u03A0\u03C1\u03BF\u03C3\u03B8\u03AE\u03BA\u03B7"}
+              </button>
+            </div>
+            {waitLoading && waitlist.length === 0 && (
+              <p className="text-center py-4 text-sm" style={{ color: "var(--c-text3)" }}>{"\u03A6\u03CC\u03C1\u03C4\u03C9\u03C3\u03B7..."}</p>
+            )}
+            {!waitLoading && waitlist.length === 0 && (
+              <p className="text-center py-4 text-sm" style={{ color: "var(--c-text3)" }}>{"\u039A\u03B5\u03BD\u03AE \u03BB\u03AF\u03C3\u03C4\u03B1 \u03B1\u03BD\u03B1\u03BC\u03BF\u03BD\u03AE\u03C2"}</p>
+            )}
+            <div className="flex flex-col gap-2">
+              {waitlist.map((w) => (
                 <button
-                  key={r.id}
-                  onClick={() => setSelectedRsrv(r)}
-                  className="flex items-center justify-between rounded-2xl border px-4 py-3 min-h-[68px] transition-transform active:scale-[0.98]"
+                  key={w.id}
+                  onClick={() => { setSelectedWl(w); setWlAssignMode(true); setPageTab("tables"); }}
+                  className="flex items-center justify-between rounded-2xl border px-4 py-3 min-h-[56px] transition-transform active:scale-[0.98]"
                   style={{ background: "var(--c-surface)", borderColor: "var(--c-border)" }}
                 >
-                  <div className="flex flex-col items-start gap-1 min-w-0">
+                  <div className="flex flex-col items-start gap-1">
+                    <span className="font-bold text-sm" style={{ color: "var(--c-text)" }}>{w.party_name}</span>
                     <div className="flex items-center gap-2">
-                      {r.source === "vip" && <span className="text-sm leading-none">{"\uD83D\uDC51"}</span>}
-                      <span className="font-bold text-sm truncate" style={{ color: "var(--c-text)" }}>
-                        {r.customer_name}
-                      </span>
-                      <span className="text-xs font-semibold" style={{ color: "var(--c-text2)" }}>
-                        {r.party_size} {"\u03AC\u03C4."}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {r.customer_phone && (
-                        <span className="text-xs" style={{ color: "var(--c-text3)" }}>{r.customer_phone}</span>
-                      )}
-                      {r.source && r.source !== "vip" && (
-                        <span className="text-xs" style={{ color: "var(--c-text3)" }}>
-                          {SOURCE_EMOJI[r.source] ?? r.source}
-                        </span>
-                      )}
-                      {r.table_name && (
-                        <span className="text-xs font-semibold" style={{ color: "#60a5fa" }}>
-                          {"\u03A4\u03C1. "}{r.table_name}
-                        </span>
-                      )}
+                      <span className="text-xs" style={{ color: "var(--c-text2)" }}>{w.party_size} {"\u03AC\u03C4."}</span>
+                      {w.phone && <span className="text-xs" style={{ color: "var(--c-text3)" }}>{w.phone}</span>}
                     </div>
                   </div>
-                  <div className="flex flex-col items-end gap-1 shrink-0 ml-2">
-                    <span className="text-sm font-bold" style={{ color: "var(--c-text)" }}>
-                      {r.reservation_time.slice(0, 5)}
-                    </span>
-                    <span
-                      className="rounded-full px-2.5 py-0.5 text-[10px] font-bold"
-                      style={{ background: sc.bg, color: sc.text }}
-                    >
-                      {statusLabel[r.status] ?? r.status}
+                  <div className="flex flex-col items-end gap-1 shrink-0">
+                    <span className="text-xs font-semibold" style={{ color: "#fbbf24" }}>
+                      {minutesAgo(w.created_at)} {"\u03BB\u03B5\u03C0\u03C4\u03AC"}
                     </span>
                   </div>
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* ============ WAITLIST TAB ============ */}
-      {pageTab === "waitlist" && (
-        <div className="flex-1 overflow-y-auto px-4 py-3 pb-[calc(16px+env(safe-area-inset-bottom))]">
-          {waitLoading && waitlist.length === 0 && (
-            <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u03A6\u03CC\u03C1\u03C4\u03C9\u03C3\u03B7..."}</p>
-          )}
-          {!waitLoading && waitlist.length === 0 && (
-            <p className="text-center mt-10 text-sm" style={{ color: "var(--c-text3)" }}>{"\u039A\u03B5\u03BD\u03AE \u03BB\u03AF\u03C3\u03C4\u03B1 \u03B1\u03BD\u03B1\u03BC\u03BF\u03BD\u03AE\u03C2"}</p>
-          )}
-          <div className="flex flex-col gap-2">
-            {waitlist.map((w) => (
-              <button
-                key={w.id}
-                onClick={() => { setSelectedWl(w); setWlAssignMode(true); setPageTab("tables"); }}
-                className="flex items-center justify-between rounded-2xl border px-4 py-3 min-h-[68px] transition-transform active:scale-[0.98]"
-                style={{ background: "var(--c-surface)", borderColor: "var(--c-border)" }}
-              >
-                <div className="flex flex-col items-start gap-1">
-                  <span className="font-bold text-sm" style={{ color: "var(--c-text)" }}>{w.party_name}</span>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs" style={{ color: "var(--c-text2)" }}>{w.party_size} {"\u03AC\u03C4."}</span>
-                    {w.phone && <span className="text-xs" style={{ color: "var(--c-text3)" }}>{w.phone}</span>}
-                  </div>
-                </div>
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <span className="text-xs font-semibold" style={{ color: "#fbbf24" }}>
-                    {minutesAgo(w.created_at)} {"\u03BB\u03B5\u03C0\u03C4\u03AC"}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-          {/* Add to waitlist button */}
-          <button
-            onClick={() => setShowAddWaitlist(true)}
-            className="fixed right-5 bottom-[calc(16px+env(safe-area-inset-bottom)+16px)] z-40 w-[60px] h-[60px] rounded-full flex items-center justify-center text-2xl font-bold transition-transform active:scale-90"
-            style={{ background: "#3b82f6", color: "#fff", boxShadow: "0 4px 20px rgba(59,130,246,0.4)" }}
-            aria-label="Προσθήκη στην αναμονή"
-          >
-            +
-          </button>
         </div>
       )}
 
