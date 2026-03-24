@@ -12,7 +12,7 @@ export interface WaiterSettings {
 }
 
 const DEFAULTS: WaiterSettings = {
-  bridgeUrl:         "http://localhost:8088",
+  bridgeUrl:         "http://192.168.0.10:8088",
   btEnabled:         false,
   minConsumptionEur: 0,
 };
@@ -93,7 +93,7 @@ export const useWaiterStore = create<WaiterState>()(
           if (state.demoMode === undefined) state.demoMode = true;
           // ensure settings has all required fields
           if (!state.settings || typeof state.settings !== 'object') {
-            state.settings = { bridgeUrl: "http://localhost:8088", btEnabled: false, minConsumptionEur: 0 };
+            state.settings = { bridgeUrl: "http://192.168.0.10:8088", btEnabled: false, minConsumptionEur: 0 };
           }
         }
         return state as unknown as WaiterState;

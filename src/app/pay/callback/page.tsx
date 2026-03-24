@@ -72,7 +72,7 @@ function CallbackInner() {
 
       // Issue fiscal final receipt (11.1) via Bridge
       const { settings } = useWaiterStore.getState();
-      const bridgeUrl = settings?.bridgeUrl || "http://localhost:8088";
+      const bridgeUrl = settings?.bridgeUrl || "http://192.168.0.10:8088";
       void fetch(`${bridgeUrl}/api/v1/payments/viva/complete-receipt`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

@@ -171,7 +171,7 @@ export default function PayPage() {
     // Issue fiscal final receipt (11.1) via Bridge — links to 8.6 order slip
     // SKIP in demo mode
     if (useWaiterStore.getState().demoMode) return;
-    const bridgeUrl = settings.bridgeUrl || "http://localhost:8088";
+    const bridgeUrl = settings.bridgeUrl || "http://192.168.0.10:8088";
     const totalCents = Math.round(subtotal * 100);
     const tipCents = Math.round((splitPayments.reduce((s, p) => s + p.tip, 0) + tip) * 100);
     const paymentType = method === "cash" ? "cash" : "card";

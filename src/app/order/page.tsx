@@ -471,7 +471,7 @@ function OrderPageInner() {
       );
     } else {
     // No kitchen printer IP — fall back to Bridge HTTP only
-    const bridgeUrl = settings.bridgeUrl || "http://localhost:8088";
+    const bridgeUrl = settings.bridgeUrl || "http://192.168.0.10:8088";
     void (async () => {
       try {
         // Create order on Bridge

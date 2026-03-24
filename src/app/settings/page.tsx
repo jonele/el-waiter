@@ -17,12 +17,12 @@ export default function SettingsPage() {
   const router = useRouter();
   const { waiter, settings, updateSettings, isOnline, pendingSyncs, failedSyncs, lastSyncedAt, theme, setTheme, logout, deviceVenueId, currentShiftId, demoMode, setDemoMode } = useWaiterStore();
   // Guard against corrupted/missing settings from localStorage hydration
-  const safeSettings = settings ?? { bridgeUrl: "http://localhost:8088", btEnabled: false, minConsumptionEur: 0 };
+  const safeSettings = settings ?? { bridgeUrl: "http://192.168.0.10:8088", btEnabled: false, minConsumptionEur: 0 };
   const [form, setForm] = useState(safeSettings);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
 
-  useEffect(() => { setForm(settings ?? { bridgeUrl: "http://localhost:8088", btEnabled: false, minConsumptionEur: 0 }); }, [settings]);
+  useEffect(() => { setForm(settings ?? { bridgeUrl: "http://192.168.0.10:8088", btEnabled: false, minConsumptionEur: 0 }); }, [settings]);
 
   function save() {
     updateSettings(form);
@@ -31,36 +31,44 @@ export default function SettingsPage() {
 
   async function syncAll() {
     const venueId = deviceVenueId || waiter?.venue_id;
-    if (!supabase || !venueId) { setSyncMsg("Η συσκευή δεν έχει ρυθμιστεί. Επέστρεψε στην αρχική σελίδα."); return; }
+    if (!supabase || !venueId) { setSyncMsg("\u274C \u0397 \u03C3\u03C5\u03C3\u03BA\u03B5\u03C5\u03AE \u03B4\u03B5\u03BD \u03AD\u03C7\u03B5\u03B9 \u03C1\u03C5\u03B8\u03BC\u03B9\u03C3\u03C4\u03B5\u03AF."); return; }
     setSyncing(true);
-    setSyncMsg("");
+    setSyncMsg("\u23F3 \u039B\u03AE\u03C8\u03B7 \u03B4\u03B5\u03B4\u03BF\u03BC\u03AD\u03BD\u03C9\u03BD...");
     try {
-      const [{ data: secs }, { data: tbls }, { data: cats }, { data: itms }, { data: waiters }] = await Promise.all([
-        supabase.from("pos_floor_sections").select("*").eq("venue_id", venueId),
-        supabase.from("pos_tables").select("*").eq("venue_id", venueId),
-        supabase.from("menu_categories").select("*").eq("venue_id", venueId).eq("is_active", true),
-        supabase.from("menu_items").select("*").eq("venue_id", venueId).eq("is_active", true),
-        supabase.from("waiter_profiles").select("*").eq("venue_id", venueId).eq("active", true),
-      ]);
+      setSyncMsg("\u23F3 \u039B\u03AE\u03C8\u03B7 \u03C4\u03BC\u03B7\u03BC\u03AC\u03C4\u03C9\u03BD...");
+      const { data: secs } = await supabase.from("pos_floor_sections").select("*").eq("venue_id", venueId);
       if (secs) await waiterDb.floorSections.bulkPut(secs.map((s) => ({
         id: s.id, venue_id: s.venue_id, name: s.name,
         sort_order: s.sort_order ?? 0, is_active: s.is_active ?? true,
       })));
+
+      setSyncMsg(`\u23F3 \u039B\u03AE\u03C8\u03B7 \u03C4\u03C1\u03B1\u03C0\u03B5\u03B6\u03B9\u03CE\u03BD... (${secs?.length ?? 0} \u03C4\u03BC\u03AE\u03BC\u03B1\u03C4\u03B1)`);
+      const { data: tbls } = await supabase.from("pos_tables").select("*").eq("venue_id", venueId);
       if (tbls) await waiterDb.posTables.bulkPut(tbls.map((t) => ({
         id: t.id, venue_id: t.venue_id, name: t.name, floor_section_id: t.floor_section_id,
         capacity: t.capacity ?? 4, status: t.status ?? "free",
         sort_order: t.sort_order ?? 0, is_active: t.is_active ?? true,
       })));
+
+      setSyncMsg(`\u23F3 \u039B\u03AE\u03C8\u03B7 \u03BC\u03B5\u03BD\u03BF\u03CD... (${tbls?.length ?? 0} \u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9\u03B1)`);
+      const { data: cats } = await supabase.from("menu_categories").select("*").eq("venue_id", venueId).eq("is_active", true);
       if (cats) await waiterDb.menuCategories.bulkPut(cats);
+
+      setSyncMsg(`\u23F3 \u039B\u03AE\u03C8\u03B7 \u03C0\u03C1\u03BF\u03CA\u03CC\u03BD\u03C4\u03C9\u03BD... (${cats?.length ?? 0} \u03BA\u03B1\u03C4\u03B7\u03B3\u03BF\u03C1\u03AF\u03B5\u03C2)`);
+      const { data: itms } = await supabase.from("menu_items").select("*").eq("venue_id", venueId).eq("is_active", true);
       if (itms) await waiterDb.menuItems.bulkPut(itms);
+
+      setSyncMsg(`\u23F3 \u039B\u03AE\u03C8\u03B7 \u03C0\u03C1\u03BF\u03C3\u03C9\u03C0\u03B9\u03BA\u03BF\u03CD... (${itms?.length ?? 0} \u03C0\u03C1\u03BF\u03CA\u03CC\u03BD\u03C4\u03B1)`);
+      const { data: waiters } = await supabase.from("waiter_profiles").select("*").eq("venue_id", venueId).eq("active", true);
       if (waiters) await waiterDb.waiterProfiles.bulkPut(waiters.map((w) => ({
-        id: w.id, venue_id: w.venue_id, name: w.name, icon: w.icon ?? "👤",
+        id: w.id, venue_id: w.venue_id, name: w.name, icon: w.icon ?? "\uD83D\uDC64",
         color: w.color ?? "#1E3A5F", pin: w.pin, active: w.active ?? true,
         sort_order: w.sort_order ?? 0,
       })));
-      setSyncMsg(`Επιτυχία! ${tbls?.length ?? 0} τραπέζια, ${cats?.length ?? 0} κατηγορίες, ${itms?.length ?? 0} προϊόντα, ${waiters?.length ?? 0} σερβιτόροι.`);
-    } catch {
-      setSyncMsg("Σφάλμα συγχρονισμού. Ελέγξτε τη σύνδεσή σας.");
+
+      setSyncMsg(`\u2705 \u0395\u03C0\u03B9\u03C4\u03C5\u03C7\u03AF\u03B1! ${secs?.length ?? 0} \u03C4\u03BC\u03AE\u03BC\u03B1\u03C4\u03B1, ${tbls?.length ?? 0} \u03C4\u03C1\u03B1\u03C0\u03AD\u03B6\u03B9\u03B1, ${cats?.length ?? 0} \u03BA\u03B1\u03C4\u03B7\u03B3\u03BF\u03C1\u03AF\u03B5\u03C2, ${itms?.length ?? 0} \u03C0\u03C1\u03BF\u03CA\u03CC\u03BD\u03C4\u03B1, ${waiters?.length ?? 0} \u03C3\u03B5\u03C1\u03B2\u03B9\u03C4\u03CC\u03C1\u03BF\u03B9.`);
+    } catch (err) {
+      setSyncMsg(`\u274C \u03A3\u03C6\u03AC\u03BB\u03BC\u03B1: ${err instanceof Error ? err.message : "\u0395\u03BB\u03AD\u03B3\u03BE\u03C4\u03B5 \u03C3\u03CD\u03BD\u03B4\u03B5\u03C3\u03B7"}`);
     }
     setSyncing(false);
   }
