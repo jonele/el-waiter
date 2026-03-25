@@ -15,6 +15,26 @@ export interface DbWaiterProfile {
   sort_order: number;
 }
 
+export interface CashierProfile {
+  id: string;
+  venue_id: string;
+  name: string;
+  icon: string;
+  color: string;
+  rvc_id: string | null;
+  rvc_name: string | null;
+  viva_terminal_id: string | null;
+  viva_terminal_name: string | null;
+  fiscal_provider: string | null;
+  fiscal_config: Record<string, unknown>;
+  printer_mappings: Array<{ ip: string; name: string; categories?: string[] }>;
+  receipt_printer_ip: string | null;
+  receipt_printer_name: string | null;
+  order_types: { tables?: boolean; bar?: boolean; quick?: boolean; delivery?: boolean };
+  sort_order: number;
+  active: boolean;
+}
+
 export interface DbFloorSection {
   id: string;
   venue_id: string;

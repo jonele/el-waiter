@@ -63,15 +63,24 @@ export default function PayPage() {
     getOpenOrder(activeTable.id).then((o) => setOrder(o ?? null));
   }, [waiter, activeTable]);
 
-  // Load Viva terminals for this venue
+  // Load Viva terminals — cashier profile terminal takes priority
   useEffect(() => {
     if (!venueId) return;
+    const cp = useWaiterStore.getState().cashierProfile;
+    // If cashier profile has a terminal, use it directly
+    if (cp?.viva_terminal_id) {
+      setTerminals([{ terminal_id: cp.viva_terminal_id, name: cp.viva_terminal_name || cp.name }]);
+      setSelectedTerminal({ terminal_id: cp.viva_terminal_id, name: cp.viva_terminal_name || cp.name });
+    }
+    // Still fetch from API for merchant_id and fallback
     fetch(`${API_BASE}/api/viva/terminals?venue_id=${venueId}`)
       .then((r) => r.json())
       .then((data: { terminals: VivaTerminal[]; merchant_id: string | null }) => {
-        setTerminals(data.terminals ?? []);
         setMerchantId(data.merchant_id ?? null);
-        if (data.terminals?.length === 1) setSelectedTerminal(data.terminals[0]);
+        if (!cp?.viva_terminal_id) {
+          setTerminals(data.terminals ?? []);
+          if (data.terminals?.length === 1) setSelectedTerminal(data.terminals[0]);
+        }
       })
       .catch(() => {/* terminals unavailable */});
   }, [venueId]);

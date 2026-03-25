@@ -454,7 +454,11 @@ function OrderPageInner() {
     }
 
     // 3. Print to kitchen — try native TCP first (Capacitor), then Bridge HTTP
-    const kitchenPrinterIp = useWaiterStore.getState().venueConfig?.kitchen_printers?.[0]?.ip;
+    // Cashier profile printer takes priority over venue config
+    const cp = useWaiterStore.getState().cashierProfile;
+    const kitchenPrinterIp = cp?.receipt_printer_ip
+      || cp?.printer_mappings?.[0]?.ip
+      || useWaiterStore.getState().venueConfig?.kitchen_printers?.[0]?.ip;
     if (kitchenPrinterIp) {
       void printKitchenTicket(
         kitchenPrinterIp,

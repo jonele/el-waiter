@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { DbWaiterProfile, DbTable } from "@/lib/waiterDb";
+import type { CashierProfile } from "@/lib/dbTypes";
 import type { VenueDeviceConfig } from "@/lib/venueConfig";
 
 export type Theme = 'dark' | 'grey' | 'light' | 'beach';
@@ -29,10 +30,12 @@ interface WaiterState {
   deviceVenueId:   string | null;
   currentShiftId:  string | null;
   venueConfig:     VenueDeviceConfig | null;
+  cashierProfile:  CashierProfile | null;
   demoMode:        boolean;
 
   login:             (w: DbWaiterProfile) => void;
   logout:            () => void;
+  setCashierProfile: (p: CashierProfile | null) => void;
   setCurrentShiftId: (id: string | null) => void;
   setActiveTable:    (t: DbTable | null) => void;
   updateSettings:    (u: Partial<WaiterSettings>) => void;
@@ -60,10 +63,12 @@ export const useWaiterStore = create<WaiterState>()(
       deviceVenueId:   null,
       currentShiftId:  null,
       venueConfig:     null,
+      cashierProfile:  null,
       demoMode:        true, // DEFAULT ON — blocks Viva/fiscal until explicitly disabled
 
       login:             (waiter)  => set({ waiter }),
-      logout:            ()        => set({ waiter: null, activeTable: null, currentShiftId: null, venueConfig: null }),
+      logout:            ()        => set({ waiter: null, activeTable: null, currentShiftId: null, venueConfig: null, cashierProfile: null }),
+      setCashierProfile: (cashierProfile) => set({ cashierProfile }),
       setCurrentShiftId: (id)      => set({ currentShiftId: id }),
       setActiveTable:    (t)       => set({ activeTable: t }),
       updateSettings:    (u)       => set((s) => ({ settings: { ...s.settings, ...u } })),
@@ -85,6 +90,7 @@ export const useWaiterStore = create<WaiterState>()(
         waiter: s.waiter ? { ...s.waiter, pin: undefined } : null,
         activeTable: s.activeTable,
         settings: s.settings, theme: s.theme, deviceVenueId: s.deviceVenueId,
+        cashierProfile: s.cashierProfile,
         currentShiftId: s.currentShiftId, venueConfig: s.venueConfig, demoMode: s.demoMode,
       }),
       migrate: (persisted, version) => {

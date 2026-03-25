@@ -11,7 +11,9 @@ import {
   WaiterProfile,
   SiblingVenue,
   supabase,
+  fetchCashierProfiles,
 } from "@/lib/supabase";
+import type { CashierProfile } from "@/lib/dbTypes";
 import QRScanner from "@/components/QRScanner";
 import type { DbWaiterProfile } from "@/lib/waiterDb";
 
@@ -44,7 +46,7 @@ function isUUID(str: string): boolean {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { waiter, login, deviceVenueId, setDeviceVenueId, setCurrentShiftId } = useWaiterStore();
+  const { waiter, login, deviceVenueId, setDeviceVenueId, setCurrentShiftId, setCashierProfile } = useWaiterStore();
 
   const [profiles, setProfiles] = useState<WaiterProfile[]>([]);
   const [profilesLoading, setProfilesLoading] = useState(false);
@@ -53,6 +55,11 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showQrLogin, setShowQrLogin] = useState(false);
+
+  // Cashier profile picker state
+  const [cashierProfiles, setCashierProfiles] = useState<CashierProfile[]>([]);
+  const [showProfilePicker, setShowProfilePicker] = useState(false);
+  const [pendingWaiter, setPendingWaiter] = useState<WaiterProfile | null>(null);
 
   // Device setup state
   const [setupInput, setSetupInput] = useState("");
@@ -135,14 +142,34 @@ export default function LoginPage() {
   }
 
   // ── Shared: login + start shift ───────────────────────────────────
-  const doLogin = useCallback(async (profile: WaiterProfile) => {
+  // Finalize login: set waiter, start shift, go to tables
+  const finalizeLogin = useCallback((profile: WaiterProfile) => {
     login(profile as unknown as DbWaiterProfile);
-    // Shift tracking is non-blocking — don't let it block login
     void startShift(profile.id, profile.venue_id, profile.name)
       .then((shiftId) => { if (shiftId) setCurrentShiftId(shiftId); })
       .catch(() => {});
     router.push("/tables");
   }, [login, setCurrentShiftId, router]);
+
+  // doLogin: after PIN, fetch cashier profiles and show picker if >1
+  const doLogin = useCallback(async (profile: WaiterProfile) => {
+    const vid = deviceVenueId || profile.venue_id;
+    const cps = await fetchCashierProfiles(vid);
+    if (cps.length === 0) {
+      // No cashier profiles — go straight to tables
+      setCashierProfile(null);
+      finalizeLogin(profile);
+    } else if (cps.length === 1) {
+      // Single profile — auto-select
+      setCashierProfile(cps[0]);
+      finalizeLogin(profile);
+    } else {
+      // Multiple — show picker
+      setPendingWaiter(profile);
+      setCashierProfiles(cps);
+      setShowProfilePicker(true);
+    }
+  }, [deviceVenueId, setCashierProfile, finalizeLogin]);
 
   // ── Login QR scan ─────────────────────────────────────────────────
   const handleLoginScan = useCallback(async (raw: string) => {
@@ -193,6 +220,60 @@ export default function LoginPage() {
       }
     }
   }
+
+  // ── Render: Cashier Profile Picker ──────────────────────────────
+  if (showProfilePicker && cashierProfiles.length > 0 && pendingWaiter) return (
+    <div style={{
+      minHeight: "100dvh", background: "var(--c-bg)",
+      display: "flex", flexDirection: "column", alignItems: "center",
+      justifyContent: "center", padding: "24px", gap: 24,
+    }}>
+      <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 0, background: "var(--c-brand-glow)" }} />
+      <div style={{ position: "relative", zIndex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 20, width: "100%", maxWidth: 400 }}>
+        <WaiterLogo size={56} />
+        <p style={{ color: "var(--c-text)", fontSize: 18, fontWeight: 700 }}>
+          {pendingWaiter.name}
+        </p>
+        <p style={{ color: "var(--c-text2)", fontSize: 14 }}>Επιλέξτε σταθμό εργασίας</p>
+
+        <div style={{ width: "100%", display: "flex", flexDirection: "column", gap: 10 }}>
+          {cashierProfiles.map((cp) => (
+            <button
+              key={cp.id}
+              onClick={() => {
+                setCashierProfile(cp);
+                setShowProfilePicker(false);
+                finalizeLogin(pendingWaiter);
+              }}
+              style={{
+                width: "100%", display: "flex", alignItems: "center", gap: 14,
+                padding: "16px 18px", borderRadius: 16,
+                background: "var(--c-surface)", border: "2px solid var(--c-border)",
+                cursor: "pointer", textAlign: "left",
+                transition: "all 0.15s",
+              }}
+            >
+              <span style={{ fontSize: 28 }}>{cp.icon || "🖥️"}</span>
+              <div style={{ flex: 1 }}>
+                <p style={{ color: "var(--c-text)", fontSize: 15, fontWeight: 700, margin: 0 }}>{cp.name}</p>
+                {cp.rvc_name && (
+                  <p style={{ color: "var(--c-text2)", fontSize: 12, margin: "2px 0 0" }}>RVC: {cp.rvc_name}</p>
+                )}
+                {cp.receipt_printer_ip && (
+                  <p style={{ color: "var(--c-text3)", fontSize: 10, margin: "2px 0 0", fontFamily: "monospace" }}>
+                    {cp.receipt_printer_ip}
+                  </p>
+                )}
+              </div>
+              <span style={{ color: "var(--c-text3)", fontSize: 18 }}>›</span>
+            </button>
+          ))}
+        </div>
+
+        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5 }}>Joey v2.10.0</p>
+      </div>
+    </div>
+  );
 
   // ── Render: Multi-venue picker ───────────────────────────────────
   if (showVenuePicker && siblingVenues.length > 1) return (
@@ -329,7 +410,7 @@ export default function LoginPage() {
         </div>
 
         {/* Version */}
-        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>Joey v2.9.0</p>
+        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>Joey v2.10.0</p>
 
       </div>
     </div>
@@ -575,7 +656,7 @@ export default function LoginPage() {
         </button>
 
         {/* Version */}
-        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>v2.9.0</p>
+        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>v2.10.0</p>
       </div>
     </div>
   );

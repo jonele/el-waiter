@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import type { CashierProfile } from "./dbTypes";
 
 /**
  * Decode Unicode escape sequences in a string.
@@ -120,6 +121,21 @@ export async function fetchProfilesForVenue(venueId: string): Promise<WaiterProf
   if (error) { derror(`fetchProfiles: ${error.message}`); return []; }
   dinfo(`fetchProfiles: got ${data?.length ?? 0} profiles`);
   return data ?? [];
+}
+
+export async function fetchCashierProfiles(venueId: string): Promise<CashierProfile[]> {
+  const { dinfo, derror } = await import("./debugLog");
+  if (!supabase) { derror("fetchCashierProfiles: supabase is NULL"); return []; }
+  dinfo(`fetchCashierProfiles: venue=${venueId.slice(0, 8)}`);
+  const { data, error } = await supabase
+    .from("cashier_profiles")
+    .select("id, venue_id, name, icon, color, rvc_id, rvc_name, viva_terminal_id, viva_terminal_name, fiscal_provider, fiscal_config, printer_mappings, receipt_printer_ip, receipt_printer_name, order_types, sort_order, active")
+    .eq("venue_id", venueId)
+    .eq("active", true)
+    .order("sort_order", { ascending: true });
+  if (error) { derror(`fetchCashierProfiles: ${error.message}`); return []; }
+  dinfo(`fetchCashierProfiles: got ${data?.length ?? 0} profiles`);
+  return (data ?? []) as CashierProfile[];
 }
 
 // ── Shift tracking + session exclusivity ─────────────────────────────────────
