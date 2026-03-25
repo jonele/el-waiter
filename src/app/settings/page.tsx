@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useWaiterStore } from "@/store/waiterStore";
 import { supabase, endShift } from "@/lib/supabase";
 import { waiterDb } from "@/lib/waiterDb";
+import { getLog, getLogText, clearLog, onLogChange } from "@/lib/debugLog";
 import type { Theme } from "@/store/waiterStore";
 
 const THEMES: { key: Theme; label: string; icon: string }[] = [
@@ -21,6 +22,10 @@ export default function SettingsPage() {
   const [form, setForm] = useState(safeSettings);
   const [syncing, setSyncing] = useState(false);
   const [syncMsg, setSyncMsg] = useState("");
+  const [showLog, setShowLog] = useState(false);
+  const [logEntries, setLogEntries] = useState(getLog());
+
+  useEffect(() => onLogChange(() => setLogEntries(getLog())), []);
 
   useEffect(() => { setForm(settings ?? { bridgeUrl: "http://192.168.0.10:8088", btEnabled: false, minConsumptionEur: 0 }); }, [settings]);
 
@@ -273,6 +278,44 @@ export default function SettingsPage() {
           >
             Διαγραφή τοπικών δεδομένων
           </button>
+        </div>
+
+        {/* Debug Log */}
+        <div className="rounded-2xl px-4 py-4 space-y-2" style={{ background: "var(--c-surface)", border: "1px solid var(--c-border)" }}>
+          <button onClick={() => setShowLog(!showLog)} className="flex items-center justify-between w-full">
+            <p className="font-medium text-sm" style={{ color: "var(--c-text)" }}>Debug Log ({logEntries.length})</p>
+            <span className="text-xs" style={{ color: "var(--c-text3)" }}>{showLog ? "Hide" : "Show"}</span>
+          </button>
+          {showLog && (
+            <>
+              <div className="flex gap-2">
+                <button onClick={() => { void navigator.clipboard.writeText(getLogText()); setSyncMsg("Log copied!"); setTimeout(() => setSyncMsg(""), 2000); }}
+                  className="text-xs px-3 py-1.5 rounded-lg font-semibold" style={{ background: "var(--c-surface2)", color: "var(--c-text2)" }}>
+                  Copy
+                </button>
+                <button onClick={() => { clearLog(); setLogEntries([]); }}
+                  className="text-xs px-3 py-1.5 rounded-lg font-semibold text-red-400" style={{ background: "rgba(239,68,68,0.1)" }}>
+                  Clear
+                </button>
+              </div>
+              <div className="max-h-64 overflow-y-auto rounded-lg p-2 text-[10px] font-mono leading-relaxed" style={{ background: "#000", color: "#0f0" }}>
+                {logEntries.length === 0 ? <p style={{ color: "#666" }}>No log entries</p> :
+                  logEntries.map((e, i) => (
+                    <p key={i} style={{ color: e.level === "error" ? "#f87171" : e.level === "warn" ? "#fbbf24" : "#4ade80" }}>
+                      [{e.ts}] {e.msg}
+                    </p>
+                  ))
+                }
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* App Info */}
+        <div className="rounded-2xl px-4 py-3 text-center space-y-0.5" style={{ background: "var(--c-surface)", border: "1px solid var(--c-border)" }}>
+          <p className="text-sm font-bold" style={{ color: "var(--c-text)" }}>Joey v2.8.1</p>
+          <p className="text-[10px]" style={{ color: "var(--c-text3)" }}>EL-Waiter by EL Value</p>
+          <p className="text-[10px] font-mono" style={{ color: "var(--c-text3)" }}>Venue: {deviceVenueId?.slice(0, 8).toUpperCase() || "—"}</p>
         </div>
 
         {/* Logout */}

@@ -13,6 +13,7 @@ import type { DbTable, DbFloorSection, DbOrder, RsrvReservation, WaitlistEntry }
 import type { Theme } from "@/store/waiterStore";
 import type { BillRequest } from "@/lib/supabase";
 import { API_BASE } from "@/lib/apiBase";
+import { dinfo, derror } from "@/lib/debugLog";
 
 // Premium table card styles — ported from RSRV FloorPlanTheme
 function getStatusStyle(status: string, isDark: boolean) {
@@ -579,21 +580,49 @@ export default function TablesPage() {
 
   async function syncFromSupabase() {
     const vid = venueId || waiter?.venue_id || "";
-    if (!supabase || !vid) return;
+    if (!supabase || !vid) { dinfo(`syncFromSupabase: skip (supabase=${!!supabase}, vid=${vid})`); return; }
+    dinfo(`syncFromSupabase: start venue=${vid.slice(0, 8)}`);
     setSyncing(true);
     try {
-      const [{ data: secs }, { data: tbls }] = await Promise.all([
+      const [{ data: secs, error: secsErr }, { data: tbls, error: tblsErr }] = await Promise.all([
         supabase.from("pos_floor_sections").select("*").eq("venue_id", vid),
         supabase.from("pos_tables").select("*").eq("venue_id", vid),
       ]);
+      if (secsErr) derror(`sections: ${secsErr.message}`);
+      if (tblsErr) derror(`tables: ${tblsErr.message}`);
+      dinfo(`syncFromSupabase: got ${secs?.length ?? 0} sections, ${tbls?.length ?? 0} tables`);
+
+      // Set state IMMEDIATELY from Supabase — don't wait for SQLite
       if (secs) {
-        await waiterDb.floorSections.bulkPut(secs.map((s) => ({
+        const mappedSecs = secs.map((s) => ({
           id: s.id, venue_id: s.venue_id, name: s.name,
           sort_order: s.sort_order ?? 0, is_active: s.is_active ?? true,
-        })));
+        } as DbFloorSection));
+        setSections(mappedSecs);
       }
       if (tbls) {
-        await waiterDb.posTables.bulkPut(tbls.map((t) => ({
+        const mappedTbls = tbls.map((t) => ({
+          id: t.id, venue_id: t.venue_id, name: t.name,
+          floor_section_id: t.floor_section_id, capacity: t.capacity ?? 4,
+          status: (t.status ?? "free") as DbTable["status"], sort_order: t.sort_order ?? 0,
+          is_active: t.is_active ?? true,
+          seated_customer_name: t.seated_customer_name ?? null,
+          seated_covers: t.seated_covers ?? null,
+          seated_allergies: (t.seated_allergies as string[] | null) ?? [],
+          seated_dietary: (t.seated_dietary as string[] | null) ?? [],
+        } as DbTable)).filter((t) => t.is_active);
+        setTables(mappedTbls);
+      }
+
+      // Background: persist to SQLite for offline use (fire-and-forget)
+      if (secs) {
+        void waiterDb.floorSections.bulkPut(secs.map((s) => ({
+          id: s.id, venue_id: s.venue_id, name: s.name,
+          sort_order: s.sort_order ?? 0, is_active: s.is_active ?? true,
+        }))).catch(() => {});
+      }
+      if (tbls) {
+        void waiterDb.posTables.bulkPut(tbls.map((t) => ({
           id: t.id, venue_id: t.venue_id, name: t.name,
           floor_section_id: t.floor_section_id, capacity: t.capacity ?? 4,
           status: t.status ?? "free", sort_order: t.sort_order ?? 0,
@@ -602,9 +631,8 @@ export default function TablesPage() {
           seated_covers: t.seated_covers ?? null,
           seated_allergies: (t.seated_allergies as string[] | null) ?? [],
           seated_dietary: (t.seated_dietary as string[] | null) ?? [],
-        })));
+        }))).catch(() => {});
       }
-      loadLocal();
     } catch (err) {
       setSyncError(`Σφάλμα συγχρονισμού: ${err instanceof Error ? err.message : "Ελέγξτε σύνδεση"}`);
       setTimeout(() => setSyncError(null), 5000);

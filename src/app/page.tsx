@@ -10,6 +10,7 @@ import {
   startShift,
   WaiterProfile,
   SiblingVenue,
+  supabase,
 } from "@/lib/supabase";
 import QRScanner from "@/components/QRScanner";
 import type { DbWaiterProfile } from "@/lib/waiterDb";
@@ -57,6 +58,15 @@ export default function LoginPage() {
   const [setupInput, setSetupInput] = useState("");
   const [setupError, setSetupError] = useState("");
   const [setupScanning, setSetupScanning] = useState(true);
+  const [allVenues, setAllVenues] = useState<{ id: string; name: string }[]>([]);
+
+  // Load venue list for picker
+  useEffect(() => {
+    if (deviceVenueId || !supabase) return;
+    supabase.from("venues").select("id, name, active").eq("active", true).order("name").then(({ data }) => {
+      if (data) setAllVenues(data);
+    });
+  }, [deviceVenueId]);
 
   // Session kicked message
   const [kicked, setKicked] = useState(false);
@@ -325,7 +335,33 @@ export default function LoginPage() {
         </div>
 
         {/* Version */}
-        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>v2.8.1</p>
+        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>Joey v2.8.1</p>
+
+        {/* Venue list picker */}
+        {allVenues.length > 0 && (
+          <div style={{ width: "100%", maxWidth: 320, marginTop: 16 }}>
+            <p style={{ color: "var(--c-text2)", fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+              {allVenues.length} venues:
+            </p>
+            <div style={{ maxHeight: 240, overflowY: "auto", borderRadius: 12, border: "1px solid var(--c-border)", background: "var(--c-surface)" }}>
+              {allVenues.map((v) => (
+                <button
+                  key={v.id}
+                  onClick={() => { setDeviceVenueId(v.id); setAllVenues([]); }}
+                  style={{
+                    width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "10px 14px", background: "transparent", border: "none",
+                    borderBottom: "1px solid var(--c-border)", cursor: "pointer",
+                    textAlign: "left",
+                  }}
+                >
+                  <span style={{ color: "var(--c-text)", fontSize: 13, fontWeight: 500 }}>{v.name}</span>
+                  <span style={{ color: "var(--c-text3)", fontSize: 10, fontFamily: "monospace" }}>{v.id.slice(0, 8)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -108,13 +108,17 @@ export async function lookupWaiterByPin(venueId: string, pin: string): Promise<W
 }
 
 export async function fetchProfilesForVenue(venueId: string): Promise<WaiterProfile[]> {
-  if (!supabase) return [];
-  const { data } = await supabase
+  const { dinfo, derror } = await import("./debugLog");
+  if (!supabase) { derror(`fetchProfiles: supabase is NULL (url=${url ? "set" : "EMPTY"}, key=${key ? "set" : "EMPTY"})`); return []; }
+  dinfo(`fetchProfiles: querying venue=${venueId.slice(0, 8)}`);
+  const { data, error } = await supabase
     .from("waiter_profiles")
     .select("id, venue_id, name, icon, color, pin, role, qr_token, active, sort_order")
     .eq("venue_id", venueId)
     .eq("active", true)
     .order("sort_order", { ascending: true });
+  if (error) { derror(`fetchProfiles: ${error.message}`); return []; }
+  dinfo(`fetchProfiles: got ${data?.length ?? 0} profiles`);
   return data ?? [];
 }
 
