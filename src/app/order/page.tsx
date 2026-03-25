@@ -150,12 +150,15 @@ function OrderPageInner() {
             setCategories(activeCats as typeof categories);
             if (activeCats.length > 0) setActiveCategory(activeCats[0].id);
           }
-          if (dbItems && activeCats.length > 0) {
-            // Set items for the first category immediately
-            const firstCatItems = dbItems
-              .filter((i: { category_id: string; is_active?: boolean; is_available?: boolean }) => i.category_id === activeCats[0].id)
-              .sort((a: { sort_order?: number }, b: { sort_order?: number }) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
-            setItems(firstCatItems as typeof items);
+          if (dbItems) {
+            // Store ALL items in ref for instant category switching
+            const sortedItems = dbItems
+              .sort((a: { sort_order?: number }, b: { sort_order?: number }) => (a.sort_order ?? 0) - (b.sort_order ?? 0)) as DbMenuItem[];
+            allItemsRef.current = sortedItems;
+            // Show first category items immediately
+            if (activeCats.length > 0) {
+              setItems(sortedItems.filter((i) => i.category_id === activeCats[0].id));
+            }
           }
 
           // Background: persist to SQLite for offline use
@@ -195,28 +198,13 @@ function OrderPageInner() {
     }
   }
 
-  async function loadItems(catId: string) {
+  // All items fetched during loadData — just filter in memory
+  const allItemsRef = useRef<DbMenuItem[]>([]);
+
+  function loadItems(catId: string) {
     if (!catId) return;
-    // Load from local DB first (instant if available)
-    const its = await waiterDb.menuItems
-      .where("category_id").equals(catId)
-      .and((i) => i.is_active && i.is_available)
-      .sortBy("sort_order");
-    if (its.length > 0) { setItems(its); return; }
-    // Local empty — fetch from Supabase directly
-    if (isOnline && supabase) {
-      const { data } = await supabase
-        .from("menu_items")
-        .select("*")
-        .eq("category_id", catId)
-        .eq("is_active", true)
-        .eq("is_available", true)
-        .order("sort_order");
-      if (data && data.length > 0) {
-        setItems(data as DbMenuItem[]);
-        void waiterDb.menuItems.bulkPut(data).catch(() => {});
-      }
-    }
+    const catItems = allItemsRef.current.filter((i) => i.category_id === catId);
+    setItems(catItems);
   }
 
   useEffect(() => { if (activeCategory) loadItems(activeCategory); }, [activeCategory]);

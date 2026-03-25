@@ -5,185 +5,293 @@
 
 ## Context
 
-Joey (EL-Waiter) is a native Android waiter app (Next.js + Capacitor). It's at v2.10.0 with:
-- Waiter PIN login ✅
-- Cashier profile picker (station selection) ✅
-- Tables from Supabase ✅
-- Menu items from Supabase ✅
+Joey (EL-Waiter) is a native Android/iOS waiter app (Next.js + Capacitor) at v2.10.0:
+- Waiter PIN login, cashier profile picker, tables, full menu — all working
+- **Problem:** Menu items are venue-scoped only. A venue with multiple RVCs (Coffee Bar, Bistro, Terrace) shows ALL items to ALL profiles. No way to scope items or prices per RVC.
 
-**The problem:** Menu items are venue-scoped only. A venue with multiple revenue centers (e.g., Coffee bar + Bistro restaurant) shows ALL items to ALL waiters. There's no way to scope a price list to a specific RVC or cashier profile.
+---
 
-## Current Data Model (Supabase: oxyycdgbvmesuadtmcjd)
+## Verified Current Schema (Supabase: oxyycdgbvmesuadtmcjd)
 
+### menu_categories (567 rows) — NO rvc_id
+| Column | Type | Notes |
+|--------|------|-------|
+| id | uuid PK | gen_random_uuid() |
+| venue_id | uuid FK → venues | |
+| name | text NOT NULL | Greek |
+| name_en/fr/es/ar/de | text | Multi-lang |
+| parent_id | uuid FK → self | Subcategories |
+| sort_order | int | Default 0 |
+| is_active | bool | Default true |
+| color | text | Default #1E3A5F |
+| orexsys_id | text | Legacy |
+
+### menu_items (4,575 rows) — NO rvc_id
+| Column | Type | Notes |
+|--------|------|-------|
+| id | uuid PK | |
+| venue_id | uuid FK → venues | |
+| category_id | uuid FK → menu_categories | |
+| name | text NOT NULL | Greek |
+| name_en/fr/es/ar/de | text | Multi-lang |
+| description + desc_en/fr/es/ar/de | text | |
+| price | numeric NOT NULL | Default 0, single base price |
+| price_takeaway | numeric | Optional |
+| currency | text | Default EUR |
+| is_active | bool | Default true |
+| is_available | bool | Default true |
+| allergens | text[] | |
+| dietary_tags | text[] | |
+| sort_order | int | |
+| orexsys_rvcsid | text | Legacy, unused |
+
+### cashier_profiles (468 rows)
+| Column | Type | Notes |
+|--------|------|-------|
+| id | uuid PK | |
+| venue_id | uuid FK → venues | |
+| name | text NOT NULL | |
+| rvc_id | uuid FK → revenue_centers | Nullable |
+| rvc_name | text | Denormalized |
+| **pricelist_name** | **text** | **Exists but just a label — no FK, no backing table** |
+| viva_terminal_id/name | text | |
+| fiscal_provider | text | |
+| fiscal_config | jsonb | |
+| printer_mappings | jsonb | |
+| receipt_printer_ip/name | text | |
+| order_types | jsonb | {quick, tables, delivery, bar} |
+| icon, color | text | |
+| active | bool | |
+| sort_order | int | |
+
+### revenue_centers (5 rows)
+| Column | Type | Notes |
+|--------|------|-------|
+| id | uuid PK | uuid_generate_v4() |
+| venue_id | uuid FK → venues | |
+| name | text NOT NULL | |
+| code | text | Short code (BISTRO, BAR) |
+| active | bool | |
+| settings | jsonb | Contains pos_rvcsid, synced_from_bridge |
+
+### No existing pricelist tables
+Checked: `pricelist*`, `price_list*`, `pricing*`, `menu_prices*`, `item_prices*` — none exist.
+
+---
+
+## Current Joey Code
+
+### Menu fetch — `src/app/order/page.tsx:132-136`
+```typescript
+// Venue-scoped only — returns ALL 174 items regardless of profile
+supabase.from("menu_categories").select("*").eq("venue_id", vid).eq("is_active", true)
+supabase.from("menu_items").select("*").eq("venue_id", vid).eq("is_active", true).eq("is_available", true)
+supabase.from("pos_modifier_groups").select("*").eq("venue_id", vid).order("sort_order")
+supabase.from("pos_modifiers").select("*").eq("venue_id", vid).order("sort_order")
+supabase.from("pos_modifier_group_categories").select("*").eq("venue_id", vid)
 ```
-venues (id, name, active)
-  └── revenue_centers (id, venue_id, name, code, settings)
-  └── waiter_profiles (id, venue_id, name, pin, role, section_name, rvc_name)
-  └── cashier_profiles (id, venue_id, name, rvc_id→FK, rvc_name, printer_mappings, viva_terminal_id, fiscal_provider)
-  └── menu_categories (id, venue_id, name, sort_order, is_active) ← NO rvc_id
-  └── menu_items (id, venue_id, category_id→FK, name, price, is_active, is_available) ← NO rvc_id
-  └── pos_tables (id, venue_id, name, floor_section_id, status)
-  └── pos_floor_sections (id, venue_id, name)
+
+### Profile fetch — `src/lib/supabase.ts:126-139`
+```typescript
+export async function fetchCashierProfiles(venueId: string): Promise<CashierProfile[]> {
+  const { data, error } = await supabase
+    .from("cashier_profiles")
+    .select("id, venue_id, name, icon, color, rvc_id, rvc_name, viva_terminal_id, viva_terminal_name, fiscal_provider, fiscal_config, printer_mappings, receipt_printer_ip, receipt_printer_name, order_types, sort_order, active")
+    .eq("venue_id", venueId)
+    .eq("active", true)
+    .order("sort_order", { ascending: true });
+  return (data ?? []) as CashierProfile[];
+}
 ```
 
-**Key gap:** `menu_categories` and `menu_items` have no `rvc_id`. Everything is flat per venue.
+### CashierProfile type — `src/lib/dbTypes.ts:18-36`
+```typescript
+export interface CashierProfile {
+  id: string; venue_id: string; name: string; icon: string; color: string;
+  rvc_id: string | null; rvc_name: string | null;
+  viva_terminal_id: string | null; viva_terminal_name: string | null;
+  fiscal_provider: string | null; fiscal_config: Record<string, unknown>;
+  printer_mappings: Array<{ ip: string; name: string; categories?: string[] }>;
+  receipt_printer_ip: string | null; receipt_printer_name: string | null;
+  order_types: { tables?: boolean; bar?: boolean; quick?: boolean; delivery?: boolean };
+  sort_order: number; active: boolean;
+}
+// NOTE: pricelist_id NOT YET in this interface — needs adding
+```
 
-## What We Need
+### Profile selection flow — `src/app/page.tsx:155-172`
+```
+doLogin(waiterProfile) → fetchCashierProfiles(vid) →
+  0 or 1 profiles → auto-select → finalizeLogin()
+  multiple → show picker UI → user selects → setCashierProfile(p) → finalizeLogin()
+```
 
-### Option A: Pricelist junction table (RECOMMENDED)
+### Data persistence
+- Online: Direct Supabase queries → React state + background SQLite write
+- Offline: Read from local SQLite (Dexie/CapSQLite)
+- Cashier profiles: NOT cached in SQLite — always fetched fresh
 
-Add a `pricelists` table that acts as a named collection of items with optional price overrides:
+---
+
+## Architecture: Price List Tables
+
+### New Tables (Migration)
 
 ```sql
-CREATE TABLE pricelists (
+-- 1. Price lists (one per RVC or custom grouping)
+CREATE TABLE pos_price_lists (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  venue_id UUID NOT NULL REFERENCES venues(id),
-  name TEXT NOT NULL,            -- e.g., "Coffee Bar Menu", "Bistro Full Menu"
+  venue_id UUID NOT NULL REFERENCES venues(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,                 -- "Coffee Bar Prices", "Bistro Full Menu"
   description TEXT,
-  is_default BOOLEAN DEFAULT false, -- fallback if no profile-specific pricelist
+  is_default BOOLEAN DEFAULT false,   -- fallback when profile has no pricelist
   active BOOLEAN DEFAULT true,
-  sort_order INTEGER DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
-CREATE TABLE pricelist_items (
+-- 2. Which categories appear in this price list
+CREATE TABLE pos_price_list_categories (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  pricelist_id UUID NOT NULL REFERENCES pricelists(id) ON DELETE CASCADE,
-  menu_item_id UUID NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
-  price_override DECIMAL(10,2),  -- NULL = use menu_item.price
-  is_available BOOLEAN DEFAULT true,
+  price_list_id UUID NOT NULL REFERENCES pos_price_lists(id) ON DELETE CASCADE,
+  category_id UUID NOT NULL REFERENCES menu_categories(id) ON DELETE CASCADE,
   sort_order INTEGER DEFAULT 0,
-  UNIQUE(pricelist_id, menu_item_id)
+  UNIQUE(price_list_id, category_id)
 );
 
--- Link cashier profiles to pricelists
-ALTER TABLE cashier_profiles ADD COLUMN pricelist_id UUID REFERENCES pricelists(id);
+-- 3. Which items are in this list + price overrides
+CREATE TABLE pos_price_list_items (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  price_list_id UUID NOT NULL REFERENCES pos_price_lists(id) ON DELETE CASCADE,
+  menu_item_id UUID NOT NULL REFERENCES menu_items(id) ON DELETE CASCADE,
+  price NUMERIC NOT NULL,             -- override price (or copy of base price)
+  price_takeaway NUMERIC,             -- optional takeaway override
+  is_available BOOLEAN DEFAULT true,  -- hide items per list
+  sort_order INTEGER DEFAULT 0,
+  UNIQUE(price_list_id, menu_item_id)
+);
+
+-- 4. Link to cashier profiles (alongside existing pricelist_name text — don't delete it)
+ALTER TABLE cashier_profiles ADD COLUMN pricelist_id UUID REFERENCES pos_price_lists(id);
+
+-- 5. RLS (mandatory)
+ALTER TABLE pos_price_lists ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pos_price_list_categories ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pos_price_list_items ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "service_role_full" ON pos_price_lists FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "service_role_full" ON pos_price_list_categories FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "service_role_full" ON pos_price_list_items FOR ALL USING (true) WITH CHECK (true);
+-- Add anon/authenticated read policies scoped by venue_id as needed
 ```
 
-**Flow:**
-1. Admin creates pricelists in EL-Loyal admin
-2. Admin assigns menu items to each pricelist (with optional price overrides)
-3. Admin links pricelist to cashier profile(s)
-4. Joey: after selecting cashier profile → fetches `pricelist_items` for that profile's `pricelist_id`
-5. Only those items show in the order screen
+### Flow
 
-### Option B: Add rvc_id to menu tables (simpler but less flexible)
+```
+EL-Loyal Admin (DeviceSettings.js):
+  1. Admin creates price lists for venue ("Coffee Bar", "Bistro Full")
+  2. Selects categories + items for each list
+  3. Sets price overrides per item (or keeps base price)
+  4. Assigns price list to cashier profile (dropdown replaces text input)
 
-```sql
-ALTER TABLE menu_categories ADD COLUMN rvc_id UUID REFERENCES revenue_centers(id);
-ALTER TABLE menu_items ADD COLUMN rvc_id UUID REFERENCES revenue_centers(id);
+Joey on login:
+  1. fetchCashierProfiles(venueId) → includes pricelist_id
+  2. If profile.pricelist_id:
+     → Fetch pos_price_list_categories WHERE price_list_id = X
+     → Fetch pos_price_list_items WHERE price_list_id = X (JOIN menu_items for names)
+     → Use override prices, show only those categories/items
+  3. If profile.pricelist_id is NULL:
+     → Check venue default (is_default = true)
+     → If no default: current behavior (all items, base prices)
 ```
 
-- NULL rvc_id = visible to all RVCs
-- Set rvc_id = visible only to that RVC
-- Joey filters: `.or('rvc_id.is.null,rvc_id.eq.${selectedRvcId}')`
+---
 
-### Jon's preference: Admin manages it manually
+## Build Plan
 
-The admin should be able to:
-1. Go to EL-Loyal > Venue Settings > Pricelists
-2. Create a pricelist (name, items, prices)
-3. Copy/paste or select from existing menu items
-4. Assign pricelist to cashier profiles
-5. Waiters see only their profile's pricelist items
+### Phase 1: Database Migration
+- Create 3 tables + RLS in Supabase (oxyycdgbvmesuadtmcjd)
+- Add pricelist_id to cashier_profiles
+- Create RPC: `copy_menu_to_pricelist(venue_id, pricelist_id)` — bulk-copies all items at base price
 
-## Joey Side Changes Needed
+### Phase 2: EL-Loyal Admin UI (DESIGN SPEC FIRST — get Jon's approval)
+- **Repo:** `~/GitHub/ELOYAL.APP/`
+- **File:** `frontend/src/pages/manager/DeviceSettings.js` (3,083 lines)
+- **Backend:** `backend/server.py`
+- Add "Price Lists" section in DeviceSettings
+- CRUD for price lists
+- Item picker with category filtering
+- Price override editor (inline editing, defaulting to base price)
+- Bulk "copy all items" button
+- Replace `pricelist_name` text input (line 2764-2772) with dropdown from pos_price_lists
+- Backend CRUD endpoints in server.py
 
-### In `src/app/order/page.tsx`:
-Currently loads ALL items: `supabase.from("menu_items").select("*").eq("venue_id", vid)`
+### Phase 3: Joey Integration
+- **Repo:** `~/Desktop/Projects/el-waiter/`
+- `src/lib/dbTypes.ts:18-36` → Add `pricelist_id: string | null` to CashierProfile
+- `src/lib/supabase.ts:126-139` → Add pricelist_id to SELECT, add `fetchPriceListMenu()`
+- `src/app/order/page.tsx:132-136` → Conditional: pricelist_id ? fetch price list items : fetch all
+- `src/lib/sqliteDb.ts:158-180` → Update offline schema for price-list-scoped cache
+- Settings sync page (`src/app/settings/page.tsx:59-63`) → Same conditional
 
-Needs to change to:
-```typescript
-const cashierProfile = useWaiterStore.getState().cashierProfile;
-const pricelistId = cashierProfile?.pricelist_id;
+### Phase 4: EL-POS Integration (later)
+- `~/GitHub/el-pos/` uses same cashier_profiles — same pattern applies
 
-if (pricelistId) {
-  // Load only items in this pricelist
-  const { data } = await supabase
-    .from("pricelist_items")
-    .select("*, menu_item:menu_items(*), menu_category:menu_items!inner(category_id, menu_categories(*))")
-    .eq("pricelist_id", pricelistId)
-    .eq("is_available", true);
-} else {
-  // No pricelist — load all (backwards compatible)
-  const { data } = await supabase
-    .from("menu_items")
-    .select("*")
-    .eq("venue_id", vid)
-    .eq("is_active", true);
-}
-```
+---
 
-### In `src/lib/dbTypes.ts`:
-Add `pricelist_id?: string | null` to `CashierProfile` interface.
+## Niceneasy Test Data
 
-### In `src/store/waiterStore.ts`:
-Already has `cashierProfile` — just needs the new field.
+- Venue ID: `f8138c92-4e95-4cab-8172-0e75557ec14f`
+- 1 RVC: "Coffee" (`b41eb1d3-bebc-46de-8f4c-3a47172d2e24`)
+- 3 cashier profiles: coffee (has rvc_id), Station 1, MANAGER-2
+- 7 waiter profiles
+- 15 categories, 174 menu items (ALL venue-scoped)
+- 3 floor sections, 12 tables
 
-## EL-Loyal Admin Side Changes Needed
-
-### New admin page: Pricelist Management
-**Location:** `~/GitHub/EL-loyal.com/frontend/src/pages/manager/` (or `~/GitHub/ELOYAL.APP/`)
-
-1. List pricelists for venue
-2. Create/edit pricelist (name, description)
-3. Add/remove items from pricelist (searchable list of all menu_items)
-4. Set price overrides per item (optional)
-5. Link pricelist to cashier profiles
-
-### Backend API:
-- `GET /api/pricelists?venue_id=X`
-- `POST /api/pricelists` (create)
-- `GET /api/pricelists/:id/items` (list items)
-- `POST /api/pricelists/:id/items` (add items)
-- `DELETE /api/pricelists/:id/items/:item_id` (remove)
-- `PATCH /api/pricelists/:id/items/:item_id` (update price override)
-
-## Tables & Reservations
-
-Tables come from RSRV (the reservation system). This works independently:
-- `pos_tables` in Supabase has venue-scoped tables
-- RSRV reservations come from the `/api/rsrv/reservations` endpoint on Vercel
-- Tables are NOT RVC-scoped (a table is a table regardless of which menu you serve from it)
+---
 
 ## File Locations
 
 | What | Where |
 |------|-------|
 | Joey repo | `~/Desktop/Projects/el-waiter/` |
-| Joey order page | `src/app/order/page.tsx` |
-| Joey store | `src/store/waiterStore.ts` |
-| Joey types | `src/lib/dbTypes.ts` |
-| Joey supabase functions | `src/lib/supabase.ts` |
-| EL-Loyal admin | `~/GitHub/EL-loyal.com/` or `~/GitHub/ELOYAL.APP/` |
-| EL-Loyal Supabase | `oxyycdgbvmesuadtmcjd` |
-| Supabase credentials | `~/Desktop/Projects/el-waiter/.env.local` |
+| Joey order page | `src/app/order/page.tsx` (lines 132-136 = menu fetch) |
+| Joey types | `src/lib/dbTypes.ts` (lines 18-36 = CashierProfile) |
+| Joey supabase | `src/lib/supabase.ts` (lines 126-139 = profile fetch) |
+| Joey SQLite schema | `src/lib/sqliteDb.ts` (lines 158-180) |
+| Joey settings sync | `src/app/settings/page.tsx` (lines 59-63) |
+| Joey store | `src/store/waiterStore.ts` (line 33 = cashierProfile) |
+| EL-Loyal admin | `~/GitHub/ELOYAL.APP/frontend/src/pages/manager/DeviceSettings.js` |
+| EL-Loyal backend | `~/GitHub/ELOYAL.APP/backend/server.py` |
+| EL-Loyal migrations | `~/GitHub/ELOYAL.APP/backend/migrations/` |
+| Supabase project | oxyycdgbvmesuadtmcjd (eloyal) |
+| Supabase creds | `~/Desktop/Projects/el-waiter/.env.local` |
 
-## Niceneasy Bistro Test Data
+---
 
-- Venue ID: `f8138c92-4e95-4cab-8172-0e75557ec14f`
-- 1 RVC: "Coffee" (`b41eb1d3-bebc-46de-8f4c-3a47172d2e24`)
-- 3 cashier profiles: coffee (has rvc_id), Station 1, MANAGER-2
-- 7 waiter profiles: jimmy, jonel3, Stavroula, Nansy, Dimos, Nick, Demetris
-- 15 categories, 174 menu items (ALL venue-scoped, no RVC filter)
-- 3 floor sections: Indoor, Marina Terrace, Bar
-- 12 tables
+## Critical Rules
+
+1. **FISCAL CODE IS SACRED** — never change proven receipt/payment values
+2. **Demo mode** gates ALL Viva/fiscal paths — default ON
+3. **RLS is mandatory** on ALL new tables
+4. **Don't delete pricelist_name** — add pricelist_id alongside it (backwards compat)
+5. **Design spec first, code never** — present admin UI layout for Jon's approval before building
+6. **SQLite hangs on Capacitor** — always set React state from Supabase first, persist to SQLite in background
+7. **Version bumps** — update package.json + page.tsx + tables/page.tsx + settings/page.tsx
+8. **Git** — commit to main, conventional commits, Vercel auto-deploys
+9. **Supabase env** — `.env.local` for static build (`vercel env pull --environment production`)
+10. **EL-Loyal repo is ELOYAL.APP** — NOT EL-loyal.com
 
 ## Build Commands
 
 ```bash
+# Joey
 cd ~/Desktop/Projects/el-waiter
-npm run build:cap          # static export (excludes API routes)
+npm run build:cap          # static export
 npx cap sync android       # copy to Android
-npx cap open android       # open Android Studio → Clean Project → Run
+npx cap open android       # Android Studio → Clean → Run
+
+# EL-Loyal
+cd ~/GitHub/ELOYAL.APP
+cd frontend && npx craco build   # build check
 ```
-
-## CRITICAL RULES
-
-1. **FISCAL CODE IS SACRED** — never change proven receipt case values
-2. **Demo mode** gates ALL Viva/fiscal paths — default ON
-3. **Supabase env vars** must be in `.env.local` for static build (run `vercel env pull --environment production`)
-4. **SQLite hangs on Capacitor** — always set React state directly from Supabase, persist to SQLite in background (fire-and-forget)
-5. **Version bumps** — update in package.json + page.tsx + tables/page.tsx + settings/page.tsx
-6. **Git** — commit to main, conventional commits, Vercel auto-deploys
