@@ -402,8 +402,8 @@ export default function TablesPage() {
         setReservations(Array.isArray(data) ? data : (data.reservations ?? []));
       }
     } catch {
-      if (isOnline) setSyncError("\u0391\u03C0\u03BF\u03C4\u03C5\u03C7\u03AF\u03B1 \u03C6\u03CC\u03C1\u03C4\u03C9\u03C3\u03B7\u03C2 \u03BA\u03C1\u03B1\u03C4\u03AE\u03C3\u03B5\u03C9\u03BD");
-      setTimeout(() => setSyncError(null), 4000);
+      // Silent — empty reservations list is fine, no scary red errors
+      derror("rsrv fetch failed (RSRV not connected?)");
     }
     setRsrvLoading(false);
   }, [venueId, isOnline]);
@@ -419,8 +419,8 @@ export default function TablesPage() {
         setWaitlist(Array.isArray(data) ? data : (data.waitlist ?? []));
       }
     } catch {
-      if (isOnline) setSyncError("\u0391\u03C0\u03BF\u03C4\u03C5\u03C7\u03AF\u03B1 \u03C6\u03CC\u03C1\u03C4\u03C9\u03C3\u03B7\u03C2 \u03BB\u03AF\u03C3\u03C4\u03B1\u03C2 \u03B1\u03BD\u03B1\u03BC\u03BF\u03BD\u03AE\u03C2");
-      setTimeout(() => setSyncError(null), 4000);
+      // Silent — empty waitlist is fine
+      derror("waitlist fetch failed");
     }
     setWaitLoading(false);
   }, [venueId]);
