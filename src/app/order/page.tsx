@@ -115,26 +115,16 @@ function OrderPageInner() {
     const vid = useWaiterStore.getState().deviceVenueId || waiter?.venue_id || "";
     if (!vid || !activeTable) return;
 
-    // ── STEP 1: Load from local DB FIRST (instant, works offline) ──
-    const [cats, existingOrder] = await Promise.all([
-      waiterDb.menuCategories.where("venue_id").equals(vid).sortBy("sort_order"),
-      getOpenOrder(activeTable.id),
-    ]);
-    let activeCats = cats.filter((c) => c.is_active);
-    setCategories(activeCats);
+    // Load existing order from local DB (non-blocking for menu)
+    void getOpenOrder(activeTable.id).then((existingOrder) => {
+      if (existingOrder) {
+        setOrder(existingOrder);
+        setOrderItems(existingOrder.items);
+      }
+    }).catch(() => {});
 
-    if (existingOrder) {
-      setOrder(existingOrder);
-      setOrderItems(existingOrder.items);
-    }
-
-    // Set first category + load items immediately from local DB
-    if (activeCats.length > 0) {
-      setActiveCategory(activeCats[0].id);
-      void loadItems(activeCats[0].id);
-    }
-
-    // ── STEP 2: Background sync from Supabase (non-blocking) ──
+    // ── Go straight to Supabase when online (skip slow SQLite) ──
+    let activeCats: typeof categories = [];
     if (isOnline && supabase && vid) {
       void (async () => {
         try {
