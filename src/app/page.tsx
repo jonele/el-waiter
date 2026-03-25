@@ -242,8 +242,13 @@ export default function LoginPage() {
               key={cp.id}
               onClick={() => {
                 setCashierProfile(cp);
-                setShowProfilePicker(false);
-                finalizeLogin(pendingWaiter);
+                if (pendingWaiter) {
+                  login(pendingWaiter as unknown as DbWaiterProfile);
+                  void startShift(pendingWaiter.id, pendingWaiter.venue_id, pendingWaiter.name)
+                    .then((shiftId) => { if (shiftId) setCurrentShiftId(shiftId); })
+                    .catch(() => {});
+                }
+                router.push("/tables");
               }}
               style={{
                 width: "100%", display: "flex", alignItems: "center", gap: 14,
