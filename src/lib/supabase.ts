@@ -129,13 +129,108 @@ export async function fetchCashierProfiles(venueId: string): Promise<CashierProf
   dinfo(`fetchCashierProfiles: venue=${venueId.slice(0, 8)}`);
   const { data, error } = await supabase
     .from("cashier_profiles")
-    .select("id, venue_id, name, icon, color, rvc_id, rvc_name, viva_terminal_id, viva_terminal_name, fiscal_provider, fiscal_config, printer_mappings, receipt_printer_ip, receipt_printer_name, order_types, extras_config, sort_order, active")
+    .select("id, venue_id, name, icon, color, rvc_id, rvc_name, pricelist_id, viva_terminal_id, viva_terminal_name, fiscal_provider, fiscal_config, printer_mappings, receipt_printer_ip, receipt_printer_name, order_types, extras_config, sort_order, active")
     .eq("venue_id", venueId)
     .eq("active", true)
     .order("sort_order", { ascending: true });
   if (error) { derror(`fetchCashierProfiles: ${error.message}`); return []; }
   dinfo(`fetchCashierProfiles: got ${data?.length ?? 0} profiles`);
   return (data ?? []) as CashierProfile[];
+}
+
+// ── Price List Functions ─────────────────────────────────────────────────────
+
+export interface VenuePriceList {
+  id: string;
+  name: string;
+  is_active: boolean;
+  item_count?: number;
+}
+
+/** Fetch all active price lists for a venue (for the waiter dropdown) */
+export async function fetchVenuePriceLists(venueId: string): Promise<VenuePriceList[]> {
+  if (!supabase) return [];
+  const { data } = await supabase
+    .from("pos_menu_price_lists")
+    .select("id, name, is_active")
+    .eq("venue_id", venueId)
+    .eq("is_active", true)
+    .order("name");
+  return (data ?? []) as VenuePriceList[];
+}
+
+/** Fetch menu scoped to a price list — returns categories + items with override prices */
+export async function fetchPriceListMenu(venueId: string, pricelistId: string) {
+  const { dinfo, derror } = await import("./debugLog");
+  if (!supabase) { derror("fetchPriceListMenu: supabase is NULL"); return null; }
+  dinfo(`fetchPriceListMenu: venue=${venueId.slice(0, 8)} pricelist=${pricelistId.slice(0, 8)}`);
+
+  // Get price list items with product details
+  const { data: plItems, error: plErr } = await supabase
+    .from("pos_menu_price_list_items")
+    .select("id, product_id, rest_price, delivery_price, takeaway_price, is_active")
+    .eq("price_list_id", pricelistId)
+    .eq("is_active", true);
+
+  if (plErr) { derror(`fetchPriceListMenu items: ${plErr.message}`); return null; }
+  if (!plItems || plItems.length === 0) { dinfo("fetchPriceListMenu: no items in price list"); return null; }
+
+  // Get the products referenced by price list items
+  const productIds = plItems.map(i => i.product_id).filter(Boolean);
+  const { data: products } = await supabase
+    .from("pos_menu_products")
+    .select("id, name, code, price, category_id, is_active, menu_item_id")
+    .eq("venue_id", venueId)
+    .in("id", productIds);
+
+  // Get categories for these products
+  const categoryIds = [...new Set((products ?? []).map(p => p.category_id).filter(Boolean))];
+  const { data: categories } = categoryIds.length > 0
+    ? await supabase
+        .from("pos_menu_categories")
+        .select("id, name, code, is_active")
+        .eq("venue_id", venueId)
+        .in("id", categoryIds)
+    : { data: [] };
+
+  // Build price map: product_id → prices
+  const priceMap: Record<string, { rest: number; delivery: number; takeaway: number }> = {};
+  for (const item of plItems) {
+    priceMap[item.product_id] = {
+      rest: Number(item.rest_price) || 0,
+      delivery: Number(item.delivery_price) || 0,
+      takeaway: Number(item.takeaway_price) || 0,
+    };
+  }
+
+  // Convert to menu_items format (so the rest of the app works unchanged)
+  const menuItems = (products ?? [])
+    .filter(p => p.is_active && priceMap[p.id])
+    .map(p => ({
+      id: p.menu_item_id || p.id,  // Use menu_item_id if available for modifier compatibility
+      venue_id: venueId,
+      category_id: p.category_id,
+      name: p.name,
+      price: priceMap[p.id].rest,
+      price_takeaway: priceMap[p.id].takeaway,
+      is_active: true,
+      is_available: true,
+      sort_order: 0,
+    }));
+
+  // Convert categories to menu_categories format
+  const menuCategories = (categories ?? [])
+    .filter(c => c.is_active)
+    .map(c => ({
+      id: c.id,
+      venue_id: venueId,
+      name: c.name,
+      sort_order: 0,
+      is_active: true,
+    }));
+
+  dinfo(`fetchPriceListMenu: ${menuCategories.length} categories, ${menuItems.length} items`);
+  return { categories: menuCategories, items: menuItems };
 }
 
 // ── Shift tracking + session exclusivity ─────────────────────────────────────

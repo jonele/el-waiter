@@ -23,6 +23,7 @@ export interface CashierProfile {
   color: string;
   rvc_id: string | null;
   rvc_name: string | null;
+  pricelist_id: string | null;
   viva_terminal_id: string | null;
   viva_terminal_name: string | null;
   fiscal_provider: string | null;

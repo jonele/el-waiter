@@ -3,7 +3,8 @@ import { Suspense, useEffect, useState, useMemo, useRef, useCallback } from "rea
 import { useRouter, useSearchParams } from "next/navigation";
 import { waiterDb, getOpenOrder, calcTotal } from "@/lib/waiterDb";
 import { useWaiterStore } from "@/store/waiterStore";
-import { supabase, decodeUnicodeEscapes } from "@/lib/supabase";
+import { supabase, decodeUnicodeEscapes, fetchVenuePriceLists, fetchPriceListMenu } from "@/lib/supabase";
+import type { VenuePriceList } from "@/lib/supabase";
 import { v4 as uuidv4 } from "uuid";
 import type { DbMenuCategory, DbMenuItem, DbOrderItem, DbOrder, DbTable, OrderItemModifier } from "@/lib/waiterDb";
 import { printKitchenTicket } from "@/lib/nativePrinter";
@@ -98,6 +99,10 @@ function OrderPageInner() {
   const [modifierSelections, setModifierSelections] = useState<Record<string, string[]>>({});
   const [categoryModGroupIds, setCategoryModGroupIds] = useState<Record<string, string[]>>({});
 
+  // Price list state — waiter can switch menu via dropdown
+  const [venuePriceLists, setVenuePriceLists] = useState<VenuePriceList[]>([]);
+  const [activePriceListId, setActivePriceListId] = useState<string | null>(null);
+
   // Check if this is a takeaway order
   const isTakeaway = searchParams.get("takeaway") === "1";
   const activeTable = isTakeaway ? { ...TAKEAWAY_TABLE, venue_id: waiter?.venue_id || "" } : storeTable;
@@ -123,8 +128,66 @@ function OrderPageInner() {
       }
     }).catch(() => {});
 
+    // ── Load available price lists for dropdown ──
+    const profile = useWaiterStore.getState().cashierProfile;
+    if (isOnline && vid) {
+      void fetchVenuePriceLists(vid).then(lists => {
+        setVenuePriceLists(lists);
+        // Set initial price list from profile default (if not already set)
+        if (!activePriceListId && profile?.pricelist_id) {
+          setActivePriceListId(profile.pricelist_id);
+        }
+      }).catch(() => {});
+    }
+
     // ── Go straight to Supabase when online (skip slow SQLite) ──
     let activeCats: typeof categories = [];
+    const usePriceList = activePriceListId || profile?.pricelist_id;
+    if (isOnline && supabase && vid && usePriceList) {
+      // ── Price list mode: load from pos_menu_price_list_items ──
+      void (async () => {
+        try {
+          const plMenu = await fetchPriceListMenu(vid, usePriceList);
+          if (plMenu && plMenu.categories.length > 0) {
+            activeCats = plMenu.categories as typeof categories;
+            setCategories(activeCats);
+            if (activeCats.length > 0) setActiveCategory(activeCats[0].id);
+            const sortedItems = plMenu.items as DbMenuItem[];
+            allItemsRef.current = sortedItems;
+            if (activeCats.length > 0) {
+              setItems(sortedItems.filter((i) => i.category_id === activeCats[0].id));
+            }
+            // Still load modifiers from venue (shared across price lists)
+            const [{ data: dbGroups }, { data: dbMods }, { data: dbGroupCats }] = await Promise.all([
+              supabase.from("pos_modifier_groups").select("*").eq("venue_id", vid).eq("is_active", true).order("sort_order"),
+              supabase.from("pos_modifiers").select("*").eq("venue_id", vid).eq("is_active", true).order("sort_order"),
+              supabase.from("pos_modifier_group_categories").select("*").eq("venue_id", vid),
+            ]);
+            if (dbGroups && dbMods) {
+              const groups: ModifierGroup[] = dbGroups.map((g) => ({
+                id: g.id, name: g.name, display_name: g.display_name,
+                selection_type: g.selection_type as "single" | "multi",
+                is_required: g.is_required, sort_order: g.sort_order,
+                options: (dbMods || []).filter((m) => m.group_id === g.id)
+                  .map((m) => ({ id: m.id, name: m.name, code: m.code, price_modifier: Number(m.price_modifier) || 0, sort_order: m.sort_order }))
+                  .sort((a, b) => a.sort_order - b.sort_order),
+              }));
+              setModifierGroups(groups);
+            }
+            if (dbGroupCats) {
+              const catMap: Record<string, string[]> = {};
+              for (const gc of dbGroupCats) {
+                if (!catMap[gc.category_id]) catMap[gc.category_id] = [];
+                catMap[gc.category_id].push(gc.group_id);
+              }
+              setCategoryModGroupIds(catMap);
+            }
+            return; // Done — skip regular menu fetch
+          }
+        } catch { /* Fall through to regular menu fetch */ }
+      })();
+      return; // Price list mode handled above
+    }
     if (isOnline && supabase && vid) {
       void (async () => {
         try {
@@ -673,6 +736,32 @@ function OrderPageInner() {
               </span>
             </p>
           )}
+        </div>
+      )}
+
+      {/* ── Price List Selector (only if venue has multiple) ── */}
+      {venuePriceLists.length > 1 && (
+        <div style={{ padding: "6px 12px", display: "flex", alignItems: "center", gap: "8px", borderBottom: "1px solid var(--c-border)" }}>
+          <span style={{ fontSize: "11px", color: "var(--c-text2)", fontWeight: 600 }}>MENU:</span>
+          <select
+            value={activePriceListId || ""}
+            onChange={(e) => {
+              const newId = e.target.value || null;
+              setActivePriceListId(newId);
+              // Reload menu with new price list
+              setTimeout(() => loadData(), 50);
+            }}
+            style={{
+              flex: 1, padding: "8px 12px", borderRadius: "10px", fontSize: "13px", fontWeight: 600,
+              background: "var(--c-bg2)", color: "var(--c-text)", border: "1px solid var(--c-border)",
+              appearance: "auto",
+            }}
+          >
+            <option value="">All Items</option>
+            {venuePriceLists.map(pl => (
+              <option key={pl.id} value={pl.id}>{pl.name}</option>
+            ))}
+          </select>
         </div>
       )}
 
