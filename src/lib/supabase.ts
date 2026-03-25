@@ -129,7 +129,7 @@ export async function fetchCashierProfiles(venueId: string): Promise<CashierProf
   dinfo(`fetchCashierProfiles: venue=${venueId.slice(0, 8)}`);
   const { data, error } = await supabase
     .from("cashier_profiles")
-    .select("id, venue_id, name, icon, color, rvc_id, rvc_name, viva_terminal_id, viva_terminal_name, fiscal_provider, fiscal_config, printer_mappings, receipt_printer_ip, receipt_printer_name, order_types, sort_order, active")
+    .select("id, venue_id, name, icon, color, rvc_id, rvc_name, viva_terminal_id, viva_terminal_name, fiscal_provider, fiscal_config, printer_mappings, receipt_printer_ip, receipt_printer_name, order_types, extras_config, sort_order, active")
     .eq("venue_id", venueId)
     .eq("active", true)
     .order("sort_order", { ascending: true });

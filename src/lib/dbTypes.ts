@@ -31,6 +31,7 @@ export interface CashierProfile {
   receipt_printer_ip: string | null;
   receipt_printer_name: string | null;
   order_types: { tables?: boolean; bar?: boolean; quick?: boolean; delivery?: boolean };
+  extras_config: string[];  // Category IDs visible to this profile (empty = all)
   sort_order: number;
   active: boolean;
 }

@@ -275,7 +275,7 @@ export default function LoginPage() {
           ))}
         </div>
 
-        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5 }}>Joey v2.10.0</p>
+        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5 }}>Joey v2.11.0</p>
       </div>
     </div>
   );
@@ -415,7 +415,7 @@ export default function LoginPage() {
         </div>
 
         {/* Version */}
-        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>Joey v2.10.0</p>
+        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>Joey v2.11.0</p>
 
       </div>
     </div>
@@ -661,7 +661,7 @@ export default function LoginPage() {
         </button>
 
         {/* Version */}
-        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>v2.10.0</p>
+        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>v2.11.0</p>
       </div>
     </div>
   );

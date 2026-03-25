@@ -136,8 +136,16 @@ function OrderPageInner() {
             supabase.from("pos_modifier_group_categories").select("*").eq("venue_id", vid),
           ]);
           // Set state IMMEDIATELY from Supabase (bypass SQLite)
+          // Filter by cashier profile's visible categories (extras_config)
+          const visibleCatIds = useWaiterStore.getState().cashierProfile?.extras_config;
           if (dbCats) {
-            activeCats = dbCats.filter((c: { is_active?: boolean }) => c.is_active !== false)
+            activeCats = dbCats
+              .filter((c: { is_active?: boolean; id: string }) => {
+                if (c.is_active === false) return false;
+                // If profile has visible categories, filter by them
+                if (visibleCatIds && visibleCatIds.length > 0) return visibleCatIds.includes(c.id);
+                return true; // No filter = show all
+              })
               .sort((a: { sort_order?: number }, b: { sort_order?: number }) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
             setCategories(activeCats as typeof categories);
             if (activeCats.length > 0) setActiveCategory(activeCats[0].id);
