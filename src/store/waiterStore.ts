@@ -83,6 +83,7 @@ export const useWaiterStore = create<WaiterState>()(
       partialize: (s) => ({
         // Strip pin from waiter profile — never persist credentials to localStorage
         waiter: s.waiter ? { ...s.waiter, pin: undefined } : null,
+        activeTable: s.activeTable,
         settings: s.settings, theme: s.theme, deviceVenueId: s.deviceVenueId,
         currentShiftId: s.currentShiftId, venueConfig: s.venueConfig, demoMode: s.demoMode,
       }),
