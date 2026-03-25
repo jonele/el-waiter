@@ -145,8 +145,10 @@ export default function LoginPage() {
   // ── Shared: login + start shift ───────────────────────────────────
   const doLogin = useCallback(async (profile: WaiterProfile) => {
     login(profile as unknown as DbWaiterProfile);
-    const shiftId = await startShift(profile.id, profile.venue_id, profile.name);
-    if (shiftId) setCurrentShiftId(shiftId);
+    // Shift tracking is non-blocking — don't let it block login
+    void startShift(profile.id, profile.venue_id, profile.name)
+      .then((shiftId) => { if (shiftId) setCurrentShiftId(shiftId); })
+      .catch(() => {});
     router.push("/tables");
   }, [login, setCurrentShiftId, router]);
 
@@ -335,7 +337,7 @@ export default function LoginPage() {
         </div>
 
         {/* Version */}
-        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>Joey v2.8.1</p>
+        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>Joey v2.8.2</p>
 
         {/* Venue list picker */}
         {allVenues.length > 0 && (
@@ -606,7 +608,7 @@ export default function LoginPage() {
         </button>
 
         {/* Version */}
-        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>v2.8.1</p>
+        <p style={{ color: "var(--c-text3)", fontSize: 10, opacity: 0.5, marginTop: 8 }}>v2.8.2</p>
       </div>
     </div>
   );
