@@ -513,9 +513,9 @@ function OrderPageInner() {
             created_at: now, updated_at: now, sent_at: now, synced: false,
           };
 
-      // 1. Save to local DB (fire-and-forget — don't block on SQLite)
-      void waiterDb.orders.put(newOrder).catch(() => {});
-      void waiterDb.posTables.update(activeTable.id, { status: "occupied" }).catch(() => {});
+      // 1. Save to local DB — MUST await these (fast, local SQLite)
+      await waiterDb.orders.put(newOrder);
+      await waiterDb.posTables.update(activeTable.id, { status: "occupied" }).catch(() => {});
       useWaiterStore.getState().setActiveTable({ ...activeTable, status: "occupied" });
 
       // Push table status to Supabase (fire-and-forget)
