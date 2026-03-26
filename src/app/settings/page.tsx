@@ -16,7 +16,7 @@ const THEMES: { key: Theme; label: string; icon: string }[] = [
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { waiter, settings, updateSettings, isOnline, pendingSyncs, failedSyncs, lastSyncedAt, theme, setTheme, logout, deviceVenueId, currentShiftId, demoMode, setDemoMode } = useWaiterStore();
+  const { waiter, settings, updateSettings, isOnline, pendingSyncs, failedSyncs, lastSyncedAt, theme, setTheme, logout, deviceVenueId, currentShiftId, demoMode, setDemoMode, cashierProfile } = useWaiterStore();
   // Guard against corrupted/missing settings from localStorage hydration
   const safeSettings = settings ?? { bridgeUrl: "http://192.168.0.10:8088", btEnabled: false, minConsumptionEur: 0 };
   const [form, setForm] = useState(safeSettings);
@@ -280,6 +280,28 @@ export default function SettingsPage() {
           </button>
         </div>
 
+        {/* Active Profile Info */}
+        {cashierProfile && (
+          <div className="rounded-2xl px-4 py-4 space-y-2" style={{ background: "var(--c-surface)", border: "1px solid var(--c-border)" }}>
+            <p className="font-medium text-sm" style={{ color: "var(--c-text)" }}>Ενεργός σταθμός</p>
+            <div className="flex items-center gap-3">
+              <span style={{ fontSize: 28 }}>{cashierProfile.icon || "🖥️"}</span>
+              <div>
+                <p className="font-bold text-sm" style={{ color: "var(--c-text)" }}>{cashierProfile.name}</p>
+                {cashierProfile.rvc_name && (
+                  <p className="text-xs" style={{ color: "var(--c-text2)" }}>RVC: {cashierProfile.rvc_name}</p>
+                )}
+                {cashierProfile.pricelist_id && (
+                  <p className="text-xs" style={{ color: "#3B82F6" }}>Price List: active</p>
+                )}
+                {cashierProfile.receipt_printer_ip && (
+                  <p className="text-[10px] font-mono" style={{ color: "var(--c-text3)" }}>{cashierProfile.receipt_printer_ip}</p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Debug Log */}
         <div className="rounded-2xl px-4 py-4 space-y-2" style={{ background: "var(--c-surface)", border: "1px solid var(--c-border)" }}>
           <button onClick={() => setShowLog(!showLog)} className="flex items-center justify-between w-full">
@@ -313,7 +335,7 @@ export default function SettingsPage() {
 
         {/* App Info */}
         <div className="rounded-2xl px-4 py-3 text-center space-y-0.5" style={{ background: "var(--c-surface)", border: "1px solid var(--c-border)" }}>
-          <p className="text-sm font-bold" style={{ color: "var(--c-text)" }}>Joey v2.11.1</p>
+          <p className="text-sm font-bold" style={{ color: "var(--c-text)" }}>Joey v2.12.1</p>
           <p className="text-[10px]" style={{ color: "var(--c-text3)" }}>EL-Waiter by EL Value</p>
           <p className="text-[10px] font-mono" style={{ color: "var(--c-text3)" }}>Venue: {deviceVenueId?.slice(0, 8).toUpperCase() || "—"}</p>
         </div>
