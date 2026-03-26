@@ -513,9 +513,11 @@ function OrderPageInner() {
             created_at: now, updated_at: now, sent_at: now, synced: false,
           };
 
-      // 1. Save to local DB — MUST await these (fast, local SQLite)
-      await waiterDb.orders.put(newOrder);
-      await waiterDb.posTables.update(activeTable.id, { status: "occupied" }).catch(() => {});
+      // 1. Save to local DB — await with 2s timeout (SQLite can hang on Capacitor)
+      const withTimeout = <T,>(p: Promise<T>, ms: number): Promise<T | void> =>
+        Promise.race([p, new Promise<void>(r => setTimeout(r, ms))]);
+      await withTimeout(waiterDb.orders.put(newOrder), 2000);
+      await withTimeout(waiterDb.posTables.update(activeTable.id, { status: "occupied" }), 1000).catch(() => {});
       useWaiterStore.getState().setActiveTable({ ...activeTable, status: "occupied" });
 
       // Push table status to Supabase (fire-and-forget)

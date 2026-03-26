@@ -335,7 +335,7 @@ export default function SettingsPage() {
 
         {/* App Info */}
         <div className="rounded-2xl px-4 py-3 text-center space-y-0.5" style={{ background: "var(--c-surface)", border: "1px solid var(--c-border)" }}>
-          <p className="text-sm font-bold" style={{ color: "var(--c-text)" }}>Joey v2.12.2</p>
+          <p className="text-sm font-bold" style={{ color: "var(--c-text)" }}>Joey v2.12.3</p>
           <p className="text-[10px]" style={{ color: "var(--c-text3)" }}>EL-Waiter by EL Value</p>
           <p className="text-[10px] font-mono" style={{ color: "var(--c-text3)" }}>Venue: {deviceVenueId?.slice(0, 8).toUpperCase() || "—"}</p>
         </div>
