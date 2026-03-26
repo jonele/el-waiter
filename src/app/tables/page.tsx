@@ -974,7 +974,7 @@ export default function TablesPage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="font-bold text-base" style={{ color: "var(--brand, #3B82F6)" }}>Joey</span>
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.12.1</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.12.2</span>
               {useWaiterStore.getState().demoMode && (
                 <span className="px-1.5 py-0.5 text-[9px] font-bold rounded" style={{ background: "#f59e0b", color: "#000" }}>DEMO</span>
               )}
