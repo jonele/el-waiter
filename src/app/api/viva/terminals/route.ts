@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { withCors, optionsResponse } from "../../cors";
 
 export const runtime = "edge";
+
+export async function OPTIONS() { return optionsResponse(); }
 
 function getAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -43,8 +46,8 @@ export async function GET(req: NextRequest) {
     })
     .filter((t) => t.terminal_id);
 
-  return NextResponse.json({
+  return withCors(NextResponse.json({
     terminals,
     merchant_id: data.viva_merchant_id ?? null,
-  });
+  }));
 }

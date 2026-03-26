@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withCors, optionsResponse } from "../../cors";
 
 export const runtime = "edge";
+
+export async function OPTIONS() { return optionsResponse(); }
 
 /**
  * Build Viva App-to-App SoftPOS URI for the waiter's phone.
@@ -72,5 +75,5 @@ export async function POST(req: NextRequest) {
 
   const uri = `vivapayclient://pay/v1?${params.toString()}`;
 
-  return NextResponse.json({ uri, order_id: body.order_id });
+  return withCors(NextResponse.json({ uri, order_id: body.order_id }));
 }

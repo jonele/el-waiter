@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withCors, optionsResponse } from "../../cors";
 
 export const runtime = "edge";
+
+export async function OPTIONS() { return optionsResponse(); }
 export const maxDuration = 60;
 
 const ISV_CLIENT_ID = process.env.VIVA_ISV_CLIENT_ID!;
@@ -85,5 +88,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Viva API error ${r.status}: ${body}` }, { status: 502 });
   }
 
-  return NextResponse.json({ success: true, session_id });
+  return withCors(NextResponse.json({ success: true, session_id }));
 }

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withCors, optionsResponse } from "../../cors";
 
 export const runtime = "edge";
+
+export async function OPTIONS() { return optionsResponse(); }
 
 const ISV_CLIENT_ID = process.env.VIVA_ISV_CLIENT_ID!;
 const ISV_CLIENT_SECRET = process.env.VIVA_ISV_CLIENT_SECRET!;
@@ -54,10 +57,10 @@ export async function GET(req: NextRequest) {
     message?: string;
   };
 
-  return NextResponse.json({
+  return withCors(NextResponse.json({
     eventId: data.eventId ?? null,
     success: data.success ?? false,
     transaction_id: data.transactionId ?? null,
     message: data.message ?? null,
-  });
+  }));
 }
