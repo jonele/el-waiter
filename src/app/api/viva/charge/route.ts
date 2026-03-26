@@ -88,5 +88,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Viva API error ${r.status}: ${body}` }, { status: 502 });
   }
 
-  return withCors(NextResponse.json({ success: true, session_id }));
+  return await withCors(NextResponse.json({ success: true, session_id }));
 }

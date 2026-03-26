@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
     })
     .filter((t) => t.terminal_id);
 
-  return withCors(NextResponse.json({
+  return await withCors(NextResponse.json({
     terminals,
     merchant_id: data.viva_merchant_id ?? null,
   }));

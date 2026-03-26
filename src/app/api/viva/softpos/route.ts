@@ -75,5 +75,5 @@ export async function POST(req: NextRequest) {
 
   const uri = `vivapayclient://pay/v1?${params.toString()}`;
 
-  return withCors(NextResponse.json({ uri, order_id: body.order_id }));
+  return await withCors(NextResponse.json({ uri, order_id: body.order_id }));
 }

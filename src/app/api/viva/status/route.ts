@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
     message?: string;
   };
 
-  return withCors(NextResponse.json({
+  return await withCors(NextResponse.json({
     eventId: data.eventId ?? null,
     success: data.success ?? false,
     transaction_id: data.transactionId ?? null,
