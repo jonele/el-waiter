@@ -103,6 +103,13 @@ function OrderPageInner() {
   const [venuePriceLists, setVenuePriceLists] = useState<VenuePriceList[]>([]);
   const [activePriceListId, setActivePriceListId] = useState<string | null>(null);
 
+  // Toast notification
+  const [toast, setToast] = useState<{ msg: string; type: "ok" | "err" | "warn" } | null>(null);
+  const showToast = (msg: string, type: "ok" | "err" | "warn" = "ok") => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
   // Check if this is a takeaway order
   const isTakeaway = searchParams.get("takeaway") === "1";
   const activeTable = isTakeaway ? { ...TAKEAWAY_TABLE, venue_id: waiter?.venue_id || "" } : storeTable;
@@ -175,10 +182,31 @@ function OrderPageInner() {
               setModifierGroups(groups);
             }
             if (dbGroupCats) {
+              // dbGroupCats maps menu_categories.id → group_id
+              // But price list uses pos_menu_categories.id — need to remap by name
               const catMap: Record<string, string[]> = {};
+
+              // First, build the standard map (menu_categories IDs)
               for (const gc of dbGroupCats) {
                 if (!catMap[gc.category_id]) catMap[gc.category_id] = [];
                 catMap[gc.category_id].push(gc.group_id);
+              }
+
+              // Now remap: find menu_categories names → match to pos_menu_categories IDs
+              const { data: menuCats } = await supabase
+                .from("menu_categories").select("id, name").eq("venue_id", vid);
+              if (menuCats && activeCats.length > 0) {
+                const menuCatNameToId: Record<string, string> = {};
+                for (const mc of menuCats) menuCatNameToId[mc.name] = mc.id;
+
+                for (const posCat of activeCats) {
+                  // Find the menu_categories.id that has the same name
+                  const menuCatId = menuCatNameToId[posCat.name];
+                  if (menuCatId && catMap[menuCatId]) {
+                    // Copy the modifier group IDs to the pos_menu_categories ID
+                    catMap[posCat.id] = catMap[menuCatId];
+                  }
+                }
               }
               setCategoryModGroupIds(catMap);
             }
@@ -526,6 +554,7 @@ function OrderPageInner() {
         orderItems,
         settings.bridgeUrl || undefined,
       );
+    showToast("Παραγγελία αποθηκεύτηκε", "ok");
     } else {
     // No kitchen printer IP — fall back to Bridge HTTP only
     const bridgeUrl = settings.bridgeUrl || "http://192.168.0.10:8088";
@@ -609,7 +638,7 @@ function OrderPageInner() {
         }
       } catch {
         // Bridge unreachable — order is still saved in Supabase + local DB
-        // Kitchen will see it on KDS via Supabase realtime
+        showToast("Bridge offline — saved to cloud", "warn");
       }
     })();
     } // end else (no kitchen printer IP)
@@ -623,7 +652,19 @@ function OrderPageInner() {
   }
 
   return (
-    <div className="flex h-screen flex-col" style={{ background: "var(--c-bg)" }}>
+    <div className="flex h-screen flex-col" style={{ background: "var(--c-bg)", position: "relative" }}>
+      {/* Toast notification */}
+      {toast && (
+        <div style={{
+          position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", zIndex: 9999,
+          padding: "12px 24px", borderRadius: 14, fontWeight: 700, fontSize: 14,
+          background: toast.type === "ok" ? "#10B981" : toast.type === "err" ? "#EF4444" : "#F59E0B",
+          color: "white", boxShadow: "0 8px 32px rgba(0,0,0,0.4)",
+          animation: "fadeIn 0.2s ease-out",
+        }}>
+          {toast.type === "ok" ? "✓" : toast.type === "err" ? "✗" : "⚠"} {toast.msg}
+        </div>
+      )}
 
       {/* Upsell — bottom sheet */}
       {showUpsell && (
