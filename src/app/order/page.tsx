@@ -500,155 +500,102 @@ function OrderPageInner() {
   async function sendToKitchen() {
     if (!waiter || !activeTable || orderItems.length === 0) return;
     setSending(true);
-    const vid = useWaiterStore.getState().deviceVenueId || waiter.venue_id;
-    const now = new Date().toISOString();
-    const newOrder: DbOrder = order
-      ? { ...order, items: orderItems, total, updated_at: now, synced: false }
-      : {
-          id: uuidv4(), table_id: activeTable.id, table_name: activeTable.name,
-          waiter_id: waiter.id, waiter_name: waiter.name, venue_id: vid,
-          items: orderItems, total, tip: 0, status: "sent",
-          created_at: now, updated_at: now, sent_at: now, synced: false,
-        };
 
-    // 1. Save to local DB + update table status everywhere
-    await waiterDb.orders.put(newOrder);
-    await waiterDb.posTables.update(activeTable.id, { status: "occupied" });
-    useWaiterStore.getState().setActiveTable({ ...activeTable, status: "occupied" });
-    // Push table status to Supabase so other waiters see it in real-time
-    if (supabase && activeTable.id && !activeTable.id.startsWith("temp-")) {
-      void supabase.from("pos_tables").update({ status: "occupied" }).eq("id", activeTable.id);
-    }
+    try {
+      const vid = useWaiterStore.getState().deviceVenueId || waiter.venue_id;
+      const now = new Date().toISOString();
+      const newOrder: DbOrder = order
+        ? { ...order, items: orderItems, total, updated_at: now, synced: false }
+        : {
+            id: uuidv4(), table_id: activeTable.id, table_name: activeTable.name,
+            waiter_id: waiter.id, waiter_name: waiter.name, venue_id: vid,
+            items: orderItems, total, tip: 0, status: "sent",
+            created_at: now, updated_at: now, sent_at: now, synced: false,
+          };
 
-    // 2. Sync to Supabase (cloud persistence)
-    let synced = false;
-    if (isOnline && supabase) {
-      try {
-        await supabase.from("kitchen_orders").upsert({
-          id: newOrder.id, venue_id: vid,
-          tab_name: activeTable.name, cashier_name: waiter.name,
-          items: orderItems, status: "pending", created_at: newOrder.created_at,
-        });
-        await waiterDb.orders.update(newOrder.id, { synced: true });
-        synced = true;
-      } catch {}
-    }
+      // 1. Save to local DB (fire-and-forget — don't block on SQLite)
+      void waiterDb.orders.put(newOrder).catch(() => {});
+      void waiterDb.posTables.update(activeTable.id, { status: "occupied" }).catch(() => {});
+      useWaiterStore.getState().setActiveTable({ ...activeTable, status: "occupied" });
 
-    if (!synced) {
-      await waiterDb.syncQueue.add({ type: "order_send", payload: JSON.stringify(newOrder), created_at: now, retries: 0 });
-      const cnt = await waiterDb.syncQueue.count();
-      useWaiterStore.getState().setPendingSyncs(cnt);
-    }
+      // Push table status to Supabase (fire-and-forget)
+      if (supabase && activeTable.id && !activeTable.id.startsWith("temp-")) {
+        void supabase.from("pos_tables").update({ status: "occupied" }).eq("id", activeTable.id);
+      }
 
-    // 3. Print to kitchen — try native TCP first (Capacitor), then Bridge HTTP
-    // Cashier profile printer takes priority over venue config
-    const cp = useWaiterStore.getState().cashierProfile;
-    const kitchenPrinterIp = cp?.receipt_printer_ip
-      || cp?.printer_mappings?.[0]?.ip
-      || useWaiterStore.getState().venueConfig?.kitchen_printers?.[0]?.ip;
-    if (kitchenPrinterIp) {
-      void printKitchenTicket(
-        kitchenPrinterIp,
-        activeTable.name,
-        waiter.name,
-        orderItems,
-        settings.bridgeUrl || undefined,
-      );
-    showToast("Παραγγελία αποθηκεύτηκε", "ok");
-    } else {
-    // No kitchen printer IP — fall back to Bridge HTTP only
-    const bridgeUrl = settings.bridgeUrl || "http://192.168.0.10:8088";
-    void (async () => {
-      try {
-        // Create order on Bridge
-        // Match EL-POS kitchen ticket format:
-        // modifiers → comma-separated, printed as "  + Μέτριο, Με γάλα"
-        // notes → printed as "  >> customer notes"
-        const bridgeItems = orderItems.map((item) => ({
-          product_id: item.menu_item_id,
-          product_name: item.name,
-          quantity: item.quantity,
-          unit_price_cents: Math.round((item.price + (item.modifiers || []).reduce((s, m) => s + m.price_modifier, 0)) * 100),
-          modifiers: item.modifiers?.length ? item.modifiers.map((m) => m.name).join(", ") : null,
-          notes: null,
-          course: 1,
-          vat_rate: 0.24,
-        }));
-
-        const createRes = await fetch(`${bridgeUrl}/api/v1/orders`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            table_id: activeTable.name,
-            waiter_id: waiter.name,
-            order_type: isTakeaway ? "takeaway" : "dine_in",
-            covers: activeTable.capacity,
-            items: bridgeItems,
-          }),
-          signal: AbortSignal.timeout(10000),
-        });
-
-        if (createRes.ok) {
-          const bridgeOrder = await createRes.json();
-          const bridgeOrderId = bridgeOrder.id || bridgeOrder.data?.id;
-          if (bridgeOrderId) {
-            // Trigger kitchen print
-            await fetch(`${bridgeUrl}/api/v1/orders/${bridgeOrderId}/send-to-kitchen`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              signal: AbortSignal.timeout(10000),
+      // 2. Sync to Supabase kitchen_orders (fire-and-forget — don't block UI)
+      if (isOnline && supabase) {
+        void (async () => {
+          try {
+            await supabase.from("kitchen_orders").upsert({
+              id: newOrder.id, venue_id: vid,
+              tab_name: activeTable.name, cashier_name: waiter.name,
+              items: orderItems, status: "pending", created_at: newOrder.created_at,
             });
+            void waiterDb.orders.update(newOrder.id, { synced: true }).catch(() => {});
+          } catch {
+            void waiterDb.syncQueue.add({ type: "order_send", payload: JSON.stringify(newOrder), created_at: now, retries: 0 }).catch(() => {});
+          }
+        })();
+      }
 
-            // 4. Issue 8.6 order slip (fiscal document, no payment yet)
-            // SKIP in demo mode — no fiscal calls to AADE
-            if (!useWaiterStore.getState().demoMode) {
-            // Greek law requires this for dine-in before final payment
-            void fetch(`${bridgeUrl}/api/v1/fiscal/order-ticket`, {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                order_id: newOrder.id,
-                bridge_order_id: bridgeOrderId,
-                table_id: activeTable.name,
-                waiter_name: waiter.name,
-                receipt_reference: `ELW-${newOrder.id.slice(-12)}-slip`,
-                items: bridgeItems.map((item, idx) => ({
-                  description: item.product_name,
-                  amount_cents: item.unit_price_cents * item.quantity,
-                  quantity: item.quantity * 100, // Viva uses x100
-                  vat_rate: 24,
-                  item_type: "goods",
-                  position: idx + 1,
-                })),
-              }),
-              signal: AbortSignal.timeout(15000),
-            }).catch(() => {
-              // Fiscal not configured or Bridge doesn't have endpoint yet
-              // Order still fires — fiscal is additive, not blocking
-            });
-            } // end demoMode check
+      // 3. Print to kitchen (fire-and-forget — don't block navigation)
+      const cp = useWaiterStore.getState().cashierProfile;
+      const kitchenPrinterIp = cp?.receipt_printer_ip
+        || cp?.printer_mappings?.[0]?.ip
+        || useWaiterStore.getState().venueConfig?.kitchen_printers?.[0]?.ip;
 
-            // Store bridge order ID for later fiscal final receipt
-            if (supabase) {
-              void supabase.from("kitchen_orders")
-                .update({ bridge_order_id: bridgeOrderId })
-                .eq("id", newOrder.id);
+      if (kitchenPrinterIp) {
+        void printKitchenTicket(kitchenPrinterIp, activeTable.name, waiter.name, orderItems, settings.bridgeUrl || undefined);
+      }
+
+      // 4. Bridge HTTP (fire-and-forget — 3s timeout, don't block)
+      const bridgeUrl = settings.bridgeUrl || "http://192.168.0.10:8088";
+      void (async () => {
+        try {
+          const bridgeItems = orderItems.map((item) => ({
+            product_id: item.menu_item_id, product_name: item.name,
+            quantity: item.quantity,
+            unit_price_cents: Math.round((item.price + (item.modifiers || []).reduce((s, m) => s + m.price_modifier, 0)) * 100),
+            modifiers: item.modifiers?.length ? item.modifiers.map((m) => m.name).join(", ") : null,
+            notes: null, course: 1, vat_rate: 0.24,
+          }));
+          const createRes = await fetch(`${bridgeUrl}/api/v1/orders`, {
+            method: "POST", headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ table_id: activeTable.name, waiter_id: waiter.name, order_type: isTakeaway ? "takeaway" : "dine_in", covers: activeTable.capacity, items: bridgeItems }),
+            signal: AbortSignal.timeout(3000),
+          });
+          if (createRes.ok) {
+            const bridgeOrder = await createRes.json();
+            const bridgeOrderId = bridgeOrder.id || bridgeOrder.data?.id;
+            if (bridgeOrderId) {
+              void fetch(`${bridgeUrl}/api/v1/orders/${bridgeOrderId}/send-to-kitchen`, { method: "POST", headers: { "Content-Type": "application/json" }, signal: AbortSignal.timeout(3000) }).catch(() => {});
+              // 8.6 fiscal slip (demo mode skips)
+              if (!useWaiterStore.getState().demoMode) {
+                void fetch(`${bridgeUrl}/api/v1/fiscal/order-ticket`, {
+                  method: "POST", headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ order_id: newOrder.id, bridge_order_id: bridgeOrderId, table_id: activeTable.name, waiter_name: waiter.name, receipt_reference: `ELW-${newOrder.id.slice(-12)}-slip`, items: bridgeItems.map((item, idx) => ({ description: item.product_name, amount_cents: item.unit_price_cents * item.quantity, quantity: item.quantity * 100, vat_rate: 24, item_type: "goods", position: idx + 1 })) }),
+                  signal: AbortSignal.timeout(5000),
+                }).catch(() => {});
+              }
+              if (supabase) void supabase.from("kitchen_orders").update({ bridge_order_id: bridgeOrderId }).eq("id", newOrder.id);
             }
           }
-        }
-      } catch {
-        // Bridge unreachable — order is still saved in Supabase + local DB
-        showToast("Bridge offline — saved to cloud", "warn");
-      }
-    })();
-    } // end else (no kitchen printer IP)
+        } catch { /* Bridge unreachable — order saved to cloud */ }
+      })();
 
-    setOrder(newOrder);
-    setSending(false);
+      // 5. IMMEDIATE feedback + navigation (don't wait for anything above)
+      setOrder(newOrder);
+      showToast("Παραγγελία εστάλη!", "ok");
 
-    const ups = detectUpsell(orderItems);
-    if (ups.length > 0) { setUpsells(ups); setShowUpsell(true); }
-    else router.push("/tables");
+      const ups = detectUpsell(orderItems);
+      if (ups.length > 0) { setUpsells(ups); setShowUpsell(true); }
+      else router.push("/tables");
+    } catch (err) {
+      showToast("Σφάλμα: " + (err instanceof Error ? err.message : "Δοκιμάστε ξανά"), "err");
+    } finally {
+      setSending(false);
+    }
   }
 
   return (
