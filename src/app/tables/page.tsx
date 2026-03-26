@@ -123,7 +123,7 @@ export default function TablesPage() {
   const [billFlash, setBillFlash] = useState<{ tableId: string; type: "processed" | "cancelled" } | null>(null);
 
   // Kitchen orders state: map of table_name -> latest status
-  const [kitchenStatus, setKitchenStatus] = useState<Record<string, "pending" | "in_progress" | "done">>({});
+  const [kitchenStatus, setKitchenStatus] = useState<Record<string, "pending" | "in_progress" | "ready" | "done">>({});
 
   // Staff messaging state
   const [showMessageSheet, setShowMessageSheet] = useState(false);
@@ -554,6 +554,21 @@ export default function TablesPage() {
       );
     }
 
+    // Kitchen status updates — "ready for pickup", "in_progress", etc.
+    ch.on("postgres_changes", { event: "UPDATE", schema: "public", table: "kitchen_orders", filter: `venue_id=eq.${vid}` },
+      (payload) => {
+        const row = payload.new as { tab_name?: string; status?: string };
+        if (row.tab_name && row.status) {
+          setKitchenStatus(prev => ({ ...prev, [row.tab_name!]: row.status as "pending" | "in_progress" | "ready" | "done" }));
+        }
+        if (row.status === "ready") {
+          setIncomingMsg({ from: "\uD83C\uDF73 \u039A\u03BF\u03C5\u03B6\u03AF\u03BD\u03B1", body: `${row.tab_name || "Table"} \u03AD\u03C4\u03BF\u03B9\u03BC\u03BF \u03B3\u03B9\u03B1 \u03C0\u03B1\u03C1\u03B1\u03BB\u03B1\u03B2\u03AE!` });
+          try { void new Audio("/notification.mp3").play(); } catch {}
+          setTimeout(() => setIncomingMsg(null), 8000);
+        }
+      }
+    );
+
     ch.subscribe();
     return () => { void supabase!.removeChannel(ch); };
   }, [waiter?.venue_id, waiter?.role]);
@@ -959,7 +974,7 @@ export default function TablesPage() {
           <div className="flex flex-col">
             <div className="flex items-center gap-2">
               <span className="font-bold text-base" style={{ color: "var(--brand, #3B82F6)" }}>Joey</span>
-              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.11.1</span>
+              <span className="px-1.5 py-0.5 text-[9px] font-semibold rounded" style={{ background: "var(--brand, #3B82F6)", color: "white", opacity: 0.9 }}>v2.12.0</span>
               {useWaiterStore.getState().demoMode && (
                 <span className="px-1.5 py-0.5 text-[9px] font-bold rounded" style={{ background: "#f59e0b", color: "#000" }}>DEMO</span>
               )}
@@ -1463,6 +1478,23 @@ export default function TablesPage() {
                           ? t.seated_customer_name.slice(0, 16) + "\u2026"
                           : t.seated_customer_name}
                         {t.seated_covers ? ` \u00B7 ${t.seated_covers}p` : ""}
+                      </span>
+                    )}
+                    {/* Kitchen ready badge — flashing green */}
+                    {kitchenSt === "ready" && (
+                      <span
+                        className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded-full px-2 py-0.5 text-[9px] font-black animate-pulse z-10"
+                        style={{ background: "#22c55e", color: "white", boxShadow: "0 0 8px rgba(34,197,94,0.6)" }}
+                      >
+                        READY
+                      </span>
+                    )}
+                    {kitchenSt === "pending" && isOccupied && (
+                      <span
+                        className="absolute -bottom-1 left-1/2 -translate-x-1/2 rounded-full px-2 py-0.5 text-[9px] font-bold z-10"
+                        style={{ background: "#f59e0b", color: "white" }}
+                      >
+                        FIRE
                       </span>
                     )}
                     {total !== undefined && (
