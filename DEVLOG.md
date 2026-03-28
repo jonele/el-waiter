@@ -310,3 +310,14 @@
 - **Store additions**: `failedSyncs`, `lastSyncedAt`, `setFailedSyncs()`, `setLastSyncedAt()`
 - **UI**: Tables page shows failed count badge (red) + last sync time; Settings page shows dead queue count + sync timestamp
 - **tsc --noEmit**: clean pass. `next build` fails on pre-existing Viva edge route issue (unrelated)
+
+## 2026-03-28 | Fix Gunther LAN timeout race
+
+### Built today
+- Fixed `AbortSignal.timeout(2000)` → `5000` in `pushToGunther()` (guntherPrint.ts)
+- Prevents duplicate prints when Gunther takes up to 3s to respond
+
+### Key files
+| File | What |
+|------|------|
+| `src/lib/guntherPrint.ts` | LAN timeout bumped to 5000ms |

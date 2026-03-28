@@ -108,7 +108,7 @@ export async function pushToGunther(
           printer_alias: printerAlias,
           job_data: jobData,
         }),
-        signal: AbortSignal.timeout(2000),
+        signal: AbortSignal.timeout(5000), // > Gunther's 3s print_timeout_ms — prevents fallback racing
       });
       if (res.ok) return; // LAN success
     } catch {
