@@ -8,6 +8,7 @@ import type { VenuePriceList } from "@/lib/supabase";
 import { v4 as uuidv4 } from "uuid";
 import type { DbMenuCategory, DbMenuItem, DbOrderItem, DbOrder, DbTable, OrderItemModifier } from "@/lib/waiterDb";
 import { printKitchenTicket } from "@/lib/nativePrinter";
+import { pushToGunther } from "@/lib/guntherPrint";
 
 // Virtual table for takeaway orders
 const TAKEAWAY_TABLE: DbTable = {
@@ -549,6 +550,12 @@ function OrderPageInner() {
 
       if (kitchenPrinterIp) {
         void printKitchenTicket(kitchenPrinterIp, activeTable.name, waiter.name, orderItems, settings.bridgeUrl || undefined);
+      }
+
+      // 3b. Gunther cloud print — insert print_jobs row for Gunther to route via LAN
+      if (isOnline && supabase) {
+        const gAlias = cp?.receipt_printer_name ?? null;
+        void pushToGunther(supabase, vid, newOrder.id, activeTable.name, waiter.name, orderItems, gAlias, newOrder.created_at);
       }
 
       // 4. Bridge HTTP (fire-and-forget — 3s timeout, don't block)

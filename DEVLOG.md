@@ -1,4 +1,19 @@
 
+## 2026-03-28 — Joey v2.12.4: Gunther CP737 print integration
+
+### Gunther cloud print (Supabase print_jobs)
+- Added `src/lib/guntherPrint.ts` — builds CP737-encoded ESC/POS bytes and inserts `print_jobs` row to Supabase
+- Gunther picks up the job within its poll interval (default 2s), routes by `printer_alias`, sends TCP to LAN printer
+- `printer_alias` = cashier profile `receipt_printer_name` (must match a Gunther `pos_printers` alias)
+- Hooked into `sendToKitchen()` at step 3b — fire-and-forget, never blocks order flow
+
+### CP737 encoding fix in nativePrinter.ts
+- Replaced UTF-8 `textToBytes()` with `encodeCp737()` using CP737 Greek DOS lookup table
+- Changed `ESC t 0x1c` (wrong UTF-8 codepage) → `ESC t 14` (CP737, matches Gunther/EL-POS)
+- Replaced `─` box-drawing separators with `=` (ASCII, safe across all codepages)
+- Fixed item format: `Qx N name` → `Nx  name`
+- `encodeCp737` exported from nativePrinter.ts and reused in guntherPrint.ts
+
 ## 2026-03-24 — Joey v2.8.0: Bundled Native Android Build
 
 ### Architecture Change: Remote → Bundled

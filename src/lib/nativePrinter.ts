@@ -25,26 +25,29 @@ const DOUBLE_SIZE_OFF = [ESC, 0x21, 0x00];
 const CUT = [GS, 0x56, 0x41, 0x03]; // Partial cut
 const FEED_3 = [ESC, 0x64, 0x03]; // Feed 3 lines
 
-function textToBytes(text: string): number[] {
-  const bytes: number[] = [];
-  for (let i = 0; i < text.length; i++) {
-    const code = text.charCodeAt(i);
-    if (code < 128) {
-      bytes.push(code);
-    } else {
-      // UTF-8 encode for Greek characters
-      if (code < 0x800) {
-        bytes.push(0xc0 | (code >> 6), 0x80 | (code & 0x3f));
-      } else {
-        bytes.push(0xe0 | (code >> 12), 0x80 | ((code >> 6) & 0x3f), 0x80 | (code & 0x3f));
-      }
-    }
-  }
-  return bytes;
+// CP737 (Greek DOS) encoding — mirrors print.rs in Gunther
+const CP737: Record<string, number> = {
+  'Α':0x80,'Β':0x81,'Γ':0x82,'Δ':0x83,'Ε':0x84,'Ζ':0x85,'Η':0x86,'Θ':0x87,
+  'Ι':0x88,'Κ':0x89,'Λ':0x8A,'Μ':0x8B,'Ν':0x8C,'Ξ':0x8D,'Ο':0x8E,'Π':0x8F,
+  'Ρ':0x90,'Σ':0x91,'Τ':0x92,'Υ':0x93,'Φ':0x94,'Χ':0x95,'Ψ':0x96,'Ω':0x97,
+  'α':0x98,'β':0x99,'γ':0x9A,'δ':0x9B,'ε':0x9C,'ζ':0x9D,'η':0x9E,'θ':0x9F,
+  'ι':0xA0,'κ':0xA1,'λ':0xA2,'μ':0xA3,'ν':0xA4,'ξ':0xA5,'ο':0xA6,'π':0xA7,
+  'ρ':0xA8,'σ':0xA9,'ς':0xAA,'τ':0xAB,'υ':0xAC,'φ':0xAD,'χ':0xAE,'ψ':0xAF,
+  'ω':0xE0,'ά':0xE1,'έ':0xE2,'ή':0xE3,'ί':0xE5,'ό':0xE7,'ύ':0xE9,'ώ':0xEA,
+  'Ά':0xEB,'Έ':0xEC,'Ή':0xED,'Ί':0xEE,'Ό':0xEF,'Ύ':0xF0,'Ώ':0xF1,
+  'ϊ':0xE4,'ϋ':0xE8,'ΐ':0xE6,
+};
+
+/** Encode a string to CP737 bytes. ASCII passthrough; Greek via lookup; unknown → '?'. */
+export function encodeCp737(text: string): number[] {
+  return Array.from(text).map(ch => {
+    const code = ch.charCodeAt(0);
+    return code < 128 ? code : (CP737[ch] ?? 0x3F);
+  });
 }
 
 function line(text: string): number[] {
-  return [...textToBytes(text), LF];
+  return [...encodeCp737(text), LF];
 }
 
 /**
@@ -67,8 +70,8 @@ export function buildKitchenTicket(
   // Init
   bytes.push(...INIT);
 
-  // Set UTF-8 mode (ESC t 28 for some printers, or codepage)
-  bytes.push(ESC, 0x74, 0x1c); // UTF-8 codepage
+  // Select CP737 Greek DOS codepage (matches Gunther / EL-POS)
+  bytes.push(ESC, 0x74, 14); // ESC t 14 = CP737
 
   // Header: Table name (centered, double size, bold)
   bytes.push(...CENTER);
@@ -82,14 +85,14 @@ export function buildKitchenTicket(
   bytes.push(...line(waiterName));
   bytes.push(...line(new Date().toLocaleTimeString("el-GR", { hour: "2-digit", minute: "2-digit" })));
   bytes.push(...LEFT);
-  bytes.push(...line("─".repeat(32)));
+  bytes.push(...line("================================"));
 
   // Items
   for (const item of items) {
     // Quantity + name (bold, double size for visibility)
     bytes.push(...DOUBLE_SIZE_ON);
     bytes.push(...BOLD_ON);
-    bytes.push(...line(`Qx ${item.quantity} ${item.name}`));
+    bytes.push(...line(`${item.quantity}x  ${item.name}`));
     bytes.push(...BOLD_OFF);
     bytes.push(...DOUBLE_SIZE_OFF);
 
@@ -114,7 +117,7 @@ export function buildKitchenTicket(
   }
 
   // Footer
-  bytes.push(...line("─".repeat(32)));
+  bytes.push(...line("================================"));
   bytes.push(...CENTER);
   bytes.push(...line(`${items.length} είδη`));
   bytes.push(...LEFT);
