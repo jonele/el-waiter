@@ -321,3 +321,8 @@
 | File | What |
 |------|------|
 | `src/lib/guntherPrint.ts` | LAN timeout bumped to 5000ms |
+
+## 2026-03-28 | Bump to v2.12.6
+
+### Built today
+- Version bump — reflects Gunther LAN timeout fix (5000ms)
